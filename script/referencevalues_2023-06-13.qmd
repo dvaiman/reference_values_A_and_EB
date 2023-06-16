@@ -1,0 +1,1299 @@
+---
+title: "reference values EB åstrand"
+format:
+  html:
+    embed-resources: true
+    page-layout: full
+execute:
+  echo: false
+  warning: false
+editor: visual
+---
+
+```{r}
+library(tidyverse)
+library(glue)
+library(gt)
+
+```
+
+```{r}
+
+df <- read_csv2(here::here("fitness reference values ekblom and astrand", "data", "2014-2022.csv"))
+
+
+
+#library(readxl)
+#X2014_2022 <- read_excel("fitness reference values ekblom and astrand/data/2014-2022.xlsx")
+
+```
+
+-   Exkludera de gulmarkerade ovan.
+-   Gör tabeller såsom i abstarctet som presenterades i Kuopio
+-   Ev figurer som illustrerar -- se inspiration tidigare artiklar
+-   Gör separata tabeller för a) rökare + ev irregular, b) heart medicine, pulse medicine och diagHighBP.
+
+# Clean data
+
+```{r}
+
+dfc <- df %>% 
+  mutate(Astrand_rel_VO2 = Astrand_MaxVO2 / WeightKG * 1000,
+         EkB_rel_VO2 = EkB_MaxVO2 / WeightKG * 1000,
+         Age = case_when(Age < 14 ~ NA_real_, # have to take away individuals not ages
+                         Age > 85 ~ NA_real_,
+                         TRUE ~ Age),
+         Gender = case_when(Gender == "other" ~ NA_character_,
+                            TRUE ~ Gender),
+         HeightCM = case_when(HeightCM < 139 ~ NA_real_,
+                              HeightCM > 214 ~ NA_real_,
+                              HeightCM == 100 & BMI == 100 & WeightKG == 100 ~ NA_real_,
+                              TRUE ~ HeightCM),
+         WaistCircumference = case_when(WaistCircumference <57 ~ NA_real_,
+                                        WaistCircumference > 180 ~ NA_real_,
+                                        WaistCircumference <= 145 & BMI > 40 ~ NA_real_,
+                                        TRUE ~ WaistCircumference),
+         WeightKG = case_when(WeightKG < 30 ~ NA_real_,
+                              WeightKG > 240 ~ NA_real_,
+                              HeightCM == 100 & BMI == 100 & WeightKG == 100 ~ NA_real_,
+                              TRUE ~ WeightKG),
+         BMI = WeightKG / (HeightCM/100)^2,
+         BMI = case_when(BMI < 13 ~ NA_real_,
+                         BMI > 70 ~ NA_real_,
+                         HeightCM == 100 & BMI == 100 & WeightKG == 100 ~ NA_real_,
+                         BMI > 50 & HeightCM < 139 ~ NA_real_,
+                         TRUE ~ BMI),
+         BloodPressureSystolic = case_when(BloodPressureSystolic < 70 ~ NA_real_,
+                                           BloodPressureSystolic > 260 ~ NA_real_,
+                                           BloodPressureSystolic - BloodPressureDiastolic < 15 ~ NA_real_,
+                                           BloodPressureSystolic - BloodPressureDiastolic > 160 ~ NA_real_,
+                                           TRUE ~ BloodPressureSystolic),
+         BloodPressureDiastolic = case_when(BloodPressureDiastolic < 30 ~ NA_real_,
+                                            BloodPressureDiastolic > 160 ~NA_real_,
+                                            BloodPressureSystolic - BloodPressureDiastolic < 15 ~ NA_real_,
+                                            BloodPressureSystolic - BloodPressureDiastolic > 160 ~ NA_real_,
+                                            TRUE ~ BloodPressureDiastolic),
+         FinalWatt_atest = case_when(FinalWatt < 50 ~ NA_real_,
+                                     TRUE ~ FinalWatt),
+         WorkPulseHighWatt_atest = case_when(WorkPulseHighWatt < 108 ~ NA_real_,
+                                             WorkPulseHighWatt > 170 ~ NA_real_,
+                                             TRUE ~ WorkPulseHighWatt),
+         Astrand_rel_VO2 = case_when(Astrand_rel_VO2 < 15 | Astrand_rel_VO2 > 80 ~ NA_real_,
+                                     TRUE ~ Astrand_rel_VO2),
+         WorkPulseLowWatt_EkB = case_when(WorkPulseLowWatt < 51 ~ NA_real_,
+                                          WorkPulseLowWatt > 140 ~ NA_real_,
+                                          TRUE ~ WorkPulseLowWatt),
+         WorkPulseHighWatt_EkB = case_when(WorkPulseHighWatt < 70 ~ NA_real_,
+                                           WorkPulseHighWatt > 180 ~ NA_real_,
+                                           TRUE ~ WorkPulseHighWatt),
+         EkB_rel_VO2 = case_when(EkB_rel_VO2 < 24 & Gender == "Male" ~ NA_real_,
+                                 EkB_rel_VO2 > 76 & Gender == "Male" ~ NA_real_,
+                                 EkB_rel_VO2 < 19 & Gender == "Female" ~ NA_real_,
+                                 EkB_rel_VO2 > 62 & Gender == "Female" ~ NA_real_,
+                                 TRUE ~ EkB_rel_VO2),
+         FinalWattFactor = (WorkPulseHighWatt_EkB - WorkPulseLowWatt_EkB) / (FinalWatt - 30),
+         EkB_rel_VO2 = case_when(FinalWattFactor < 0.2 | FinalWattFactor >1 ~ NA_real_,
+                                 TRUE ~ EkB_rel_VO2),
+         Ssyk1_hpi2 =  str_sub(Profession2Code, end = -4L),
+         Ssyk1_hpi = str_sub(ProfessionCode, end = -4L),
+         Ssyk2_hpi2 =  str_sub(Profession2Code, end = -3L),
+         Ssyk2_hpi = str_sub(ProfessionCode, end = -3L),
+         Ssyk1_hpi_combined = coalesce(Ssyk1_hpi2, Ssyk1_hpi),
+         Ssyk2_hpi_combined = coalesce(Ssyk2_hpi2, Ssyk2_hpi),
+         agegroup_3 = case_when(Age >= 50  & Age <= 65 ~ '50-65',
+                                Age >= 35  & Age <= 49 ~ '35-49',
+                                Age >= 18  & Age <= 34 ~ '18-34'),
+         agegroup_4 = case_when(Age >= 60  & Age <= 75 ~ '60-75',
+                                Age >= 50  & Age <= 59 ~ '50-59',
+                                Age >= 35  & Age <= 49 ~ '35-49',
+                                Age >= 18  & Age <= 34 ~ '18-34'),
+         agegroup_6 = case_when(Age >= 65  & Age <= 75 ~ '65-75',
+                                Age >= 55  & Age <= 64 ~ '55-64',
+                                Age >= 45  & Age <= 54 ~ '45-54',
+                                Age >= 35  & Age <= 44 ~ '35-44',
+                                Age >= 25  & Age <= 34 ~ '25-34',
+                                Age >= 18  & Age <= 24 ~ '18-24'),
+           agegroup_5 = case_when(
+    Age >= 20 & Age <= 25 ~ "20-25 yrs",
+    Age >= 26 & Age <= 30 ~ "26-30 yrs",
+    Age >= 31 & Age <= 35 ~ "31-35 yrs",
+    Age >= 36 & Age <= 40 ~ "36-40 yrs",
+    Age >= 41 & Age <= 45 ~ "41-45 yrs",
+    Age >= 46 & Age <= 50 ~ "46-50 yrs",
+    Age >= 51 & Age <= 55 ~ "51-55 yrs",
+    Age >= 56 & Age <= 60 ~ "56-60 yrs",
+    Age >= 61 & Age <= 65 ~ "61-65 yrs",
+    TRUE ~ NA_character_
+  ),
+  AgeGroup = case_when(
+    Age >= 20 & Age <= 29 ~ "20-29 years",
+    Age >= 30 & Age <= 39 ~ "30-39 years",
+    Age >= 40 & Age <= 49 ~ "40-49 years",
+    Age >= 50 & Age <= 59 ~ "50-59 years",
+    Age >= 60 & Age <= 69 ~ "60-69 years",
+    Age >= 70 ~ "+70 years",
+    TRUE ~ NA_character_
+  ),
+         Astrand_rel_VO2_32_di = case_when(Astrand_rel_VO2 < 32 ~ 1,
+                                        Astrand_rel_VO2 >= 32 ~ 0),
+         CRF_binary_32 = case_when(Astrand_rel_VO2 < 32 ~ 1,
+                                   Astrand_rel_VO2 >= 32 ~ 0)) %>% 
+   mutate_all(~replace(., . == 0, NA)) |> 
+  #create id numbers
+  mutate(id = row_number())
+
+
+
+# remove a outlier
+
+dfc <- dfc |> filter(id != 24939)
+# finding the outlier: 
+# filter(Age>65, EkB_rel_VO2>65) |> select(id)
+
+#write_csv(dfc, here::here("fitness reference values ekblom and astrand", "data", "2014-2022_clean.csv"))
+```
+
+## HUNT study data
+
+```{r}
+hunt <- 
+  data.frame(
+  Gender = c("Male", "Female", "Male", "Female", "Male", "Female", "Male", "Female", "Male", "Female", "Male", "Female", "Male", "Female"),
+  AgeGroup = c("All", "All", "20-29 years", "20-29 years", "30-39 years", "30-39 years", "40-49 years", "40-49 years", "50-59 years", "50-59 years", "60-69 years", "60-69 years", "+70 years", "+70 years"),
+  N_hunt = c(1050, 1013, 101, 92, 172, 203, 264, 249, 267, 259, 182, 152, 64, 58),
+  hunt_VO2_Lmin = c("3.74 +0.76", "2.47 +0.51", "4.30 +0.73", "2.77 + 0.47", "4.20 +0.65", "2.74 +0.50", "4.00 +0,62", "2.62 +0.44", "3.61 +0.60", "2.35 +0.38", "3.23 +0.57", "2.14 +0.36", "2.71 +0.56", "1.80 +0.36"),
+  hunt_VO2_mLkgmin = c("44.2 +9.3", "35.8 +7.7", "54.0 +8.8", "42.8 +7.6", "48.6 +7.9", "39.6 + 7.0", "46.6 +8.0", "37.8 +7.0", "41.9 +7.6", "33.7 +5.7", "38.4 +6.9", "30.5 +5.1", "34.2 +7.1", "26.8 +5.1")
+) %>%
+  mutate(
+    hunt_VO2_Lmin = str_replace_all(hunt_VO2_Lmin, "\\+\\s*", "±"),
+         hunt_VO2_mLkgmin = str_replace_all(hunt_VO2_mLkgmin, "\\+\\s*", "±")
+         ) |> 
+  filter(
+    AgeGroup != "All"
+  )
+
+
+```
+
+## HPI data for merging with hunt
+
+```{r}
+hpi <-
+ dfc %>%
+  filter(Gender != "Other") |> 
+  group_by(AgeGroup, Gender) %>%
+  summarize(
+       N_Astrand = sum(!is.na(Astrand_rel_VO2)),
+    N_EkB = sum(!is.na(EkB_rel_VO2)),
+    mean_Astrand_rel_VO2 = mean(Astrand_rel_VO2, na.rm = TRUE),
+    mean_Astrand_MaxVO2 = mean(Astrand_MaxVO2, na.rm = TRUE),
+    mean_EkB_rel_VO2 = mean(EkB_rel_VO2, na.rm = TRUE),
+    mean_EkB_MaxVO2 = mean(EkB_MaxVO2, na.rm = TRUE),
+    sd_Astrand_rel_VO2 = sd(Astrand_rel_VO2, na.rm = TRUE),
+    sd_Astrand_MaxVO2 = sd(Astrand_MaxVO2, na.rm = TRUE),
+    sd_EkB_rel_VO2 = sd(EkB_rel_VO2, na.rm = TRUE),
+    sd_EkB_MaxVO2 = sd(EkB_MaxVO2, na.rm = TRUE)
+  ) |> 
+  drop_na(AgeGroup) |> 
+ mutate(Astrand_VO2_mLkgmin = glue("{sprintf('%.2f', round(mean_Astrand_rel_VO2, 2))} ±{sprintf('%.2f', round(sd_Astrand_rel_VO2, 2))}"),
+         Astrand_VO2_Lmin = glue("{sprintf('%.2f', round(mean_Astrand_MaxVO2, 2))} ±{sprintf('%.2f', round(sd_Astrand_MaxVO2, 2))}"),
+         EkB_VO2_mLkgmin= glue("{sprintf('%.2f', round(mean_EkB_rel_VO2, 2))} ±{sprintf('%.2f', round(sd_EkB_rel_VO2, 2))}"),
+         EkB_VO2_Lmin = glue("{sprintf('%.2f', round(mean_EkB_MaxVO2, 2))} ±{sprintf('%.2f', round(sd_EkB_MaxVO2, 2))}")) %>%
+  select(AgeGroup, Gender,N_EkB, N_Astrand, EkB_VO2_mLkgmin, Astrand_VO2_mLkgmin, Astrand_VO2_Lmin, EkB_VO2_Lmin)
+
+```
+
+## Merge and relocate variables
+
+```{r}
+merged_df <- full_join(hunt, hpi) |> 
+  select(
+    AgeGroup, 
+    Gender, 
+    N_hunt, 
+    N_EkB, 
+    N_Astrand, 
+    hunt_VO2_mLkgmin,  
+    EkB_VO2_mLkgmin, 
+    Astrand_VO2_mLkgmin, 
+    hunt_VO2_Lmin, 
+    EkB_VO2_Lmin, 
+    Astrand_VO2_Lmin)
+
+
+
+```
+
+### Hunt vs EB vs Åstrandtest 
+### ml and L
+
+```{r}
+merged_df |> 
+  gt::gt()|>
+  opt_interactive(
+    use_search = TRUE,
+    use_filters = TRUE,
+    use_resizers = TRUE,
+    use_highlight = TRUE,
+    use_compact_mode = TRUE,
+    use_text_wrapping = FALSE,
+    use_page_size_select = TRUE
+  )
+```
+
+# EB reference Table
+
+### Those smoking or using blood or pulse pressure medicine are removed 
+### ml
+
+```{r}
+
+eb <-
+dfc %>%  
+   filter(
+     DiagHighBloodPressure == "N", 
+          HeartMedicine == "N", 
+          PulseMedicine == "N", 
+          TobaccoSmoking > 4, 
+          Gender != "Other"
+          ) |> 
+  drop_na(EkB_rel_VO2, agegroup_5) %>% 
+  group_by(Gender, agegroup_5) %>% 
+  reframe(mean = quantile(EkB_rel_VO2, c(.1,.25,.40,.50,.60,.75,.9)), 
+            percentile = c(.1,.25,.40,.50,.60,.75,.9),
+            n=n()) %>% 
+#  ungroup() %>% 
+  mutate(mean = round(mean,1),
+         percentile = percentile*100) %>% 
+  pivot_wider( id_cols = c(Gender, agegroup_5, n),
+               names_from = percentile,
+               values_from = mean,
+               names_prefix = "q") %>% 
+  mutate( Age = glue::glue("{agegroup_5} yrs"),
+          VeryLow = glue::glue("<{sprintf('%.1f', q10)}"),
+          Low = glue::glue(">{sprintf('%.1f', q10)}-{sprintf('%.1f', q25)}"),
+          SomewhatLow = glue::glue(">{sprintf('%.1f', q25)}-{sprintf('%.1f', q40)}"),
+          Average1 = glue::glue(">{sprintf('%.1f', q40)}-"),
+          Average2 = glue::glue("{sprintf('%.1f', q50)}"),
+          Average3 = glue::glue("-{sprintf('%.1f', q60)}"),
+          SomewhatHigh = glue::glue(">{sprintf('%.1f', q60)}-{sprintf('%.1f', q75)}"),
+          High = glue::glue(">{sprintf('%.1f', q75)}-{sprintf('%.1f', q90)}"),
+          VeryHigh = glue::glue(">{sprintf('%.1f', q90)}")
+          ) %>% 
+  select(!c(4:10, agegroup_5)) %>% 
+  relocate(n, .after = VeryHigh) %>% 
+  relocate(Age, .before = VeryLow) |> 
+    filter(
+    Age != "NA yrs",
+    Gender != "Other"
+  )
+
+
+eb |> gt::gt() |>
+  opt_interactive(
+    use_search = TRUE,
+    use_filters = TRUE,
+    use_resizers = TRUE,
+    use_highlight = TRUE,
+    use_compact_mode = TRUE,
+    use_text_wrapping = FALSE,
+    use_page_size_select = TRUE
+  )
+
+
+```
+
+## L/min
+
+```{r}
+eLmin <-
+dfc %>%  
+   filter(
+     DiagHighBloodPressure == "N", 
+          HeartMedicine == "N", 
+          PulseMedicine == "N", 
+          TobaccoSmoking > 4, 
+          Gender != "Other"
+          ) |> 
+  drop_na(EkB_MaxVO2, agegroup_5) %>% 
+  group_by(Gender, agegroup_5) %>% 
+  reframe(mean = quantile(EkB_MaxVO2, c(.1,.25,.40,.50,.60,.75,.9)), 
+            percentile = c(.1,.25,.40,.50,.60,.75,.9),
+            n=n()) %>% 
+#  ungroup() %>% 
+  mutate(mean = round(mean,1),
+         percentile = percentile*100) %>% 
+  pivot_wider( id_cols = c(Gender, agegroup_5, n),
+               names_from = percentile,
+               values_from = mean,
+               names_prefix = "q") %>% 
+  mutate( Age = glue::glue("{agegroup_5} yrs"),
+          VeryLow = glue::glue("<{sprintf('%.1f', q10)}"),
+          Low = glue::glue(">{sprintf('%.1f', q10)}-{sprintf('%.1f', q25)}"),
+          SomewhatLow = glue::glue(">{sprintf('%.1f', q25)}-{sprintf('%.1f', q40)}"),
+          Average1 = glue::glue(">{sprintf('%.1f', q40)}-"),
+          Average2 = glue::glue("{sprintf('%.1f', q50)}"),
+          Average3 = glue::glue("-{sprintf('%.1f', q60)}"),
+          SomewhatHigh = glue::glue(">{sprintf('%.1f', q60)}-{sprintf('%.1f', q75)}"),
+          High = glue::glue(">{sprintf('%.1f', q75)}-{sprintf('%.1f', q90)}"),
+          VeryHigh = glue::glue(">{sprintf('%.1f', q90)}")
+          ) %>% 
+  select(!c(4:10, agegroup_5)) %>% 
+  relocate(n, .after = VeryHigh) %>% 
+  relocate(Age, .before = VeryLow) |> 
+    filter(
+    Age != "NA yrs",
+    Gender != "Other"
+  )
+
+
+eLmin |> gt::gt() |>
+  opt_interactive(
+    use_search = TRUE,
+    use_filters = TRUE,
+    use_resizers = TRUE,
+    use_highlight = TRUE,
+    use_compact_mode = TRUE,
+    use_text_wrapping = FALSE,
+    use_page_size_select = TRUE
+  )
+```
+
+### smokers, but those using blood or pulse pressure medicine or diagnosed with high blood pressure are removed -
+### ml
+
+```{r}
+
+eb2 <-
+dfc %>%  
+   filter(
+     DiagHighBloodPressure == "N", 
+          HeartMedicine == "N", 
+          PulseMedicine == "N", 
+          TobaccoSmoking <= 4, 
+          Gender != "Other"
+          ) |> 
+  drop_na(EkB_rel_VO2, agegroup_5) %>% 
+  group_by(Gender, agegroup_5) %>% 
+  reframe(mean = quantile(EkB_rel_VO2, c(.1,.25,.40,.50,.60,.75,.9)), 
+            percentile = c(.1,.25,.40,.50,.60,.75,.9),
+            n=n()) %>% 
+#  ungroup() %>% 
+  mutate(mean = round(mean,1),
+         percentile = percentile*100) %>% 
+  pivot_wider( id_cols = c(Gender, agegroup_5, n),
+               names_from = percentile,
+               values_from = mean,
+               names_prefix = "q") %>% 
+  mutate( Age = glue::glue("{agegroup_5} yrs"),
+          VeryLow = glue::glue("<{sprintf('%.1f', q10)}"),
+          Low = glue::glue(">{sprintf('%.1f', q10)}-{sprintf('%.1f', q25)}"),
+          SomewhatLow = glue::glue(">{sprintf('%.1f', q25)}-{sprintf('%.1f', q40)}"),
+          Average1 = glue::glue(">{sprintf('%.1f', q40)}-"),
+          Average2 = glue::glue("{sprintf('%.1f', q50)}"),
+          Average3 = glue::glue("-{sprintf('%.1f', q60)}"),
+          SomewhatHigh = glue::glue(">{sprintf('%.1f', q60)}-{sprintf('%.1f', q75)}"),
+          High = glue::glue(">{sprintf('%.1f', q75)}-{sprintf('%.1f', q90)}"),
+          VeryHigh = glue::glue(">{sprintf('%.1f', q90)}")
+          ) %>% 
+  select(!c(4:10, agegroup_5)) %>% 
+  relocate(n, .after = VeryHigh) %>% 
+  relocate(Age, .before = VeryLow) |> 
+   filter(
+    Age != "NA yrs",
+    Gender != "Other"
+  )
+
+
+eb2 |> gt::gt()|>
+  opt_interactive(
+    use_search = TRUE,
+    use_filters = TRUE,
+    use_resizers = TRUE,
+    use_highlight = TRUE,
+    use_compact_mode = TRUE,
+    use_text_wrapping = FALSE,
+    use_page_size_select = TRUE
+  )
+
+
+```
+
+## L/min
+
+```{r}
+elmin2 <-
+dfc %>%  
+   filter(
+     DiagHighBloodPressure == "N", 
+          HeartMedicine == "N", 
+          PulseMedicine == "N", 
+          TobaccoSmoking <= 4, 
+          Gender != "Other"
+          ) |> 
+  drop_na(EkB_MaxVO2, agegroup_5) %>% 
+  group_by(Gender, agegroup_5) %>% 
+  reframe(mean = quantile(EkB_MaxVO2, c(.1,.25,.40,.50,.60,.75,.9)), 
+            percentile = c(.1,.25,.40,.50,.60,.75,.9),
+            n=n()) %>% 
+#  ungroup() %>% 
+  mutate(mean = round(mean,1),
+         percentile = percentile*100) %>% 
+  pivot_wider( id_cols = c(Gender, agegroup_5, n),
+               names_from = percentile,
+               values_from = mean,
+               names_prefix = "q") %>% 
+  mutate( Age = glue::glue("{agegroup_5} yrs"),
+          VeryLow = glue::glue("<{sprintf('%.1f', q10)}"),
+          Low = glue::glue(">{sprintf('%.1f', q10)}-{sprintf('%.1f', q25)}"),
+          SomewhatLow = glue::glue(">{sprintf('%.1f', q25)}-{sprintf('%.1f', q40)}"),
+          Average1 = glue::glue(">{sprintf('%.1f', q40)}-"),
+          Average2 = glue::glue("{sprintf('%.1f', q50)}"),
+          Average3 = glue::glue("-{sprintf('%.1f', q60)}"),
+          SomewhatHigh = glue::glue(">{sprintf('%.1f', q60)}-{sprintf('%.1f', q75)}"),
+          High = glue::glue(">{sprintf('%.1f', q75)}-{sprintf('%.1f', q90)}"),
+          VeryHigh = glue::glue(">{sprintf('%.1f', q90)}")
+          ) %>% 
+  select(!c(4:10, agegroup_5)) %>% 
+  relocate(n, .after = VeryHigh) %>% 
+  relocate(Age, .before = VeryLow) |> 
+   filter(
+    Age != "NA yrs",
+    Gender != "Other"
+  )
+
+
+elmin2 |> gt::gt()|>
+  opt_interactive(
+    use_search = TRUE,
+    use_filters = TRUE,
+    use_resizers = TRUE,
+    use_highlight = TRUE,
+    use_compact_mode = TRUE,
+    use_text_wrapping = FALSE,
+    use_page_size_select = TRUE
+  )
+
+```
+
+
+### these with high bloodpressure or using blood or pulse medicin but not smoking 
+### ml
+
+```{r}
+ebb <-
+dfc %>%  
+   filter(
+     DiagHighBloodPressure == "Y" | 
+          HeartMedicine == "Y" | 
+          PulseMedicine == "Y", 
+          TobaccoSmoking > 4, 
+          Gender != "Other"
+          ) |> 
+  drop_na(EkB_rel_VO2, agegroup_5) %>% 
+  group_by(Gender, agegroup_5) %>% 
+  reframe(mean = quantile(EkB_rel_VO2, c(.1,.25,.40,.50,.60,.75,.9)), 
+            percentile = c(.1,.25,.40,.50,.60,.75,.9),
+            n=n()) %>% 
+#  ungroup() %>% 
+  mutate(mean = round(mean,1),
+         percentile = percentile*100) %>% 
+  pivot_wider( id_cols = c(Gender, agegroup_5, n),
+               names_from = percentile,
+               values_from = mean,
+               names_prefix = "q") %>% 
+  mutate( Age = glue::glue("{agegroup_5} yrs"),
+          VeryLow = glue::glue("<{sprintf('%.1f', q10)}"),
+          Low = glue::glue(">{sprintf('%.1f', q10)}-{sprintf('%.1f', q25)}"),
+          SomewhatLow = glue::glue(">{sprintf('%.1f', q25)}-{sprintf('%.1f', q40)}"),
+          Average1 = glue::glue(">{sprintf('%.1f', q40)}-"),
+          Average2 = glue::glue("{sprintf('%.1f', q50)}"),
+          Average3 = glue::glue("-{sprintf('%.1f', q60)}"),
+          SomewhatHigh = glue::glue(">{sprintf('%.1f', q60)}-{sprintf('%.1f', q75)}"),
+          High = glue::glue(">{sprintf('%.1f', q75)}-{sprintf('%.1f', q90)}"),
+          VeryHigh = glue::glue(">{sprintf('%.1f', q90)}")
+          ) %>% 
+  select(!c(4:10, agegroup_5)) %>% 
+  relocate(n, .after = VeryHigh) %>% 
+  relocate(Age, .before = VeryLow) |> 
+    filter(
+    Age != "NA yrs",
+    Gender != "Other"
+  )
+
+
+ebb |> gt::gt() |>
+  opt_interactive(
+    use_search = TRUE,
+    use_filters = TRUE,
+    use_resizers = TRUE,
+    use_highlight = TRUE,
+    use_compact_mode = TRUE,
+    use_text_wrapping = FALSE,
+    use_page_size_select = TRUE
+  )
+```
+
+
+
+
+
+
+# Astrand reference Table
+
+### not included are: Those smoking or using blood or pulse pressure medicine or diagnosed with high blood pressure  
+### ml
+
+```{r}
+
+A <-
+dfc %>%  
+   filter(
+     DiagHighBloodPressure == "N", 
+          HeartMedicine == "N", 
+          PulseMedicine == "N", 
+          TobaccoSmoking > 4, 
+          Gender != "Other"
+          ) |> 
+  drop_na(Astrand_rel_VO2, agegroup_5) %>% 
+  group_by(Gender, agegroup_5) %>% 
+  reframe(mean = quantile(Astrand_rel_VO2, c(.1,.25,.40,.50,.60,.75,.9)), 
+            percentile = c(.1,.25,.40,.50,.60,.75,.9),
+            n=n()) %>% 
+#  ungroup() %>% 
+  mutate(mean = round(mean,1),
+         percentile = percentile*100) %>% 
+  pivot_wider( id_cols = c(Gender, agegroup_5, n),
+               names_from = percentile,
+               values_from = mean,
+               names_prefix = "q") %>% 
+  mutate( Age = glue::glue("{agegroup_5} yrs"),
+          VeryLow = glue::glue("<{sprintf('%.1f', q10)}"),
+          Low = glue::glue(">{sprintf('%.1f', q10)}-{sprintf('%.1f', q25)}"),
+          SomewhatLow = glue::glue(">{sprintf('%.1f', q25)}-{sprintf('%.1f', q40)}"),
+          Average1 = glue::glue(">{sprintf('%.1f', q40)}-"),
+          Average2 = glue::glue("{sprintf('%.1f', q50)}"),
+          Average3 = glue::glue("-{sprintf('%.1f', q60)}"),
+          SomewhatHigh = glue::glue(">{sprintf('%.1f', q60)}-{sprintf('%.1f', q75)}"),
+          High = glue::glue(">{sprintf('%.1f', q75)}-{sprintf('%.1f', q90)}"),
+          VeryHigh = glue::glue(">{sprintf('%.1f', q90)}")
+          ) %>% 
+  select(!c(4:10, agegroup_5)) %>% 
+  relocate(n, .after = VeryHigh) %>% 
+  relocate(Age, .before = VeryLow) |> 
+   filter(
+    Age != "NA yrs",
+    Gender != "Other"
+  )
+
+
+A |> gt::gt()|>
+  opt_interactive(
+    use_search = TRUE,
+    use_filters = TRUE,
+    use_resizers = TRUE,
+    use_highlight = TRUE,
+    use_compact_mode = TRUE,
+    use_text_wrapping = FALSE,
+    use_page_size_select = TRUE
+  )
+
+
+```
+
+### L/min
+
+```{r}
+A <-
+dfc %>%  
+   filter(
+     DiagHighBloodPressure == "N", 
+          HeartMedicine == "N", 
+          PulseMedicine == "N", 
+          TobaccoSmoking > 4, 
+          Gender != "Other"
+          ) |> 
+  drop_na(Astrand_MaxVO2, agegroup_5) %>% 
+  group_by(Gender, agegroup_5) %>% 
+  reframe(mean = quantile(Astrand_MaxVO2, c(.1,.25,.40,.50,.60,.75,.9)), 
+            percentile = c(.1,.25,.40,.50,.60,.75,.9),
+            n=n()) %>% 
+#  ungroup() %>% 
+  mutate(mean = round(mean,1),
+         percentile = percentile*100) %>% 
+  pivot_wider( id_cols = c(Gender, agegroup_5, n),
+               names_from = percentile,
+               values_from = mean,
+               names_prefix = "q") %>% 
+  mutate( Age = glue::glue("{agegroup_5} yrs"),
+          VeryLow = glue::glue("<{sprintf('%.1f', q10)}"),
+          Low = glue::glue(">{sprintf('%.1f', q10)}-{sprintf('%.1f', q25)}"),
+          SomewhatLow = glue::glue(">{sprintf('%.1f', q25)}-{sprintf('%.1f', q40)}"),
+          Average1 = glue::glue(">{sprintf('%.1f', q40)}-"),
+          Average2 = glue::glue("{sprintf('%.1f', q50)}"),
+          Average3 = glue::glue("-{sprintf('%.1f', q60)}"),
+          SomewhatHigh = glue::glue(">{sprintf('%.1f', q60)}-{sprintf('%.1f', q75)}"),
+          High = glue::glue(">{sprintf('%.1f', q75)}-{sprintf('%.1f', q90)}"),
+          VeryHigh = glue::glue(">{sprintf('%.1f', q90)}")
+          ) %>% 
+  select(!c(4:10, agegroup_5)) %>% 
+  relocate(n, .after = VeryHigh) %>% 
+  relocate(Age, .before = VeryLow) |> 
+   filter(
+    Age != "NA yrs",
+    Gender != "Other"
+  )
+
+
+A |> gt::gt()|>
+  opt_interactive(
+    use_search = TRUE,
+    use_filters = TRUE,
+    use_resizers = TRUE,
+    use_highlight = TRUE,
+    use_compact_mode = TRUE,
+    use_text_wrapping = FALSE,
+    use_page_size_select = TRUE
+  )
+```
+
+### smokers but not any using blood or pulse pressure medicine or diagnosed with high blood pressure 
+### ml
+
+```{r}
+
+A2 <-
+dfc %>%  
+   filter(
+     DiagHighBloodPressure == "N" , 
+          HeartMedicine == "N" ,
+          PulseMedicine == "N", 
+          TobaccoSmoking <= 4, 
+          Gender != "Other"
+          ) |>  
+  drop_na(Astrand_rel_VO2, agegroup_5) %>% 
+  group_by(Gender, agegroup_5) %>% 
+  reframe(mean = quantile(Astrand_rel_VO2, c(.1,.25,.40,.50,.60,.75,.9)), 
+            percentile = c(.1,.25,.40,.50,.60,.75,.9),
+            n=n()) %>% 
+#  ungroup() %>% 
+  mutate(mean = round(mean,1),
+         percentile = percentile*100) %>% 
+  pivot_wider( id_cols = c(Gender, agegroup_5, n),
+               names_from = percentile,
+               values_from = mean,
+               names_prefix = "q") %>% 
+  mutate( Age = glue::glue("{agegroup_5} yrs"),
+          VeryLow = glue::glue("<{sprintf('%.1f', q10)}"),
+          Low = glue::glue(">{sprintf('%.1f', q10)}-{sprintf('%.1f', q25)}"),
+          SomewhatLow = glue::glue(">{sprintf('%.1f', q25)}-{sprintf('%.1f', q40)}"),
+          Average1 = glue::glue(">{sprintf('%.1f', q40)}-"),
+          Average2 = glue::glue("{sprintf('%.1f', q50)}"),
+          Average3 = glue::glue("-{sprintf('%.1f', q60)}"),
+          SomewhatHigh = glue::glue(">{sprintf('%.1f', q60)}-{sprintf('%.1f', q75)}"),
+          High = glue::glue(">{sprintf('%.1f', q75)}-{sprintf('%.1f', q90)}"),
+          VeryHigh = glue::glue(">{sprintf('%.1f', q90)}")
+          ) %>% 
+  select(!c(4:10, agegroup_5)) %>% 
+  relocate(n, .after = VeryHigh) %>% 
+  relocate(Age, .before = VeryLow) |> 
+   filter(
+    Age != "NA yrs",
+    Gender != "Other"
+  )
+
+
+eb |> gt::gt(A2)|>
+  opt_interactive(
+    use_search = TRUE,
+    use_filters = TRUE,
+    use_resizers = TRUE,
+    use_highlight = TRUE,
+    use_compact_mode = TRUE,
+    use_text_wrapping = FALSE,
+    use_page_size_select = TRUE
+  )
+```
+
+### L/min
+
+```{r}
+
+A2 <-
+dfc %>%  
+   filter(
+     DiagHighBloodPressure == "N", 
+          HeartMedicine == "N", 
+          PulseMedicine == "N", 
+          TobaccoSmoking <= 4, 
+          Gender != "Other"
+          ) |> 
+  drop_na(Astrand_TO2, agegroup_5) %>% 
+  group_by(Gender, agegroup_5) %>% 
+  reframe(mean = quantile(Astrand_TO2, c(.1,.25,.40,.50,.60,.75,.9)), 
+            percentile = c(.1,.25,.40,.50,.60,.75,.9),
+            n=n()) %>% 
+#  ungroup() %>% 
+  mutate(mean = round(mean,1),
+         percentile = percentile*100) %>% 
+  pivot_wider( id_cols = c(Gender, agegroup_5, n),
+               names_from = percentile,
+               values_from = mean,
+               names_prefix = "q") %>% 
+  mutate( Age = glue::glue("{agegroup_5} yrs"),
+          VeryLow = glue::glue("<{sprintf('%.1f', q10)}"),
+          Low = glue::glue(">{sprintf('%.1f', q10)}-{sprintf('%.1f', q25)}"),
+          SomewhatLow = glue::glue(">{sprintf('%.1f', q25)}-{sprintf('%.1f', q40)}"),
+          Average1 = glue::glue(">{sprintf('%.1f', q40)}-"),
+          Average2 = glue::glue("{sprintf('%.1f', q50)}"),
+          Average3 = glue::glue("-{sprintf('%.1f', q60)}"),
+          SomewhatHigh = glue::glue(">{sprintf('%.1f', q60)}-{sprintf('%.1f', q75)}"),
+          High = glue::glue(">{sprintf('%.1f', q75)}-{sprintf('%.1f', q90)}"),
+          VeryHigh = glue::glue(">{sprintf('%.1f', q90)}")
+          ) %>% 
+  select(!c(4:10, agegroup_5)) %>% 
+  relocate(n, .after = VeryHigh) %>% 
+  relocate(Age, .before = VeryLow) |> 
+   filter(
+    Age != "NA yrs",
+    Gender != "Other"
+  )
+
+
+eb |> gt::gt(A2)|>
+  opt_interactive(
+    use_search = TRUE,
+    use_filters = TRUE,
+    use_resizers = TRUE,
+    use_highlight = TRUE,
+    use_compact_mode = TRUE,
+    use_text_wrapping = FALSE,
+    use_page_size_select = TRUE
+  )
+```
+
+### those with high bloodpressure or using blood or pulse medicin but not smoking 
+### ml
+
+```{r}
+Ab <-
+dfc %>%  
+   filter(
+     DiagHighBloodPressure == "Y" | 
+          HeartMedicine == "Y" | 
+          PulseMedicine == "Y", 
+          TobaccoSmoking > 4, 
+          Gender != "Other" 
+          ) |>  
+  drop_na(Astrand_rel_VO2, agegroup_5) %>% 
+  group_by(Gender, agegroup_5) %>% 
+  reframe(mean = quantile(Astrand_rel_VO2, c(.1,.25,.40,.50,.60,.75,.9)), 
+            percentile = c(.1,.25,.40,.50,.60,.75,.9),
+            n=n()) %>% 
+#  ungroup() %>% 
+  mutate(mean = round(mean,1),
+         percentile = percentile*100) %>% 
+  pivot_wider( id_cols = c(Gender, agegroup_5, n),
+               names_from = percentile,
+               values_from = mean,
+               names_prefix = "q") %>% 
+  mutate( Age = glue::glue("{agegroup_5} yrs"),
+          VeryLow = glue::glue("<{sprintf('%.1f', q10)}"),
+          Low = glue::glue(">{sprintf('%.1f', q10)}-{sprintf('%.1f', q25)}"),
+          SomewhatLow = glue::glue(">{sprintf('%.1f', q25)}-{sprintf('%.1f', q40)}"),
+          Average1 = glue::glue(">{sprintf('%.1f', q40)}-"),
+          Average2 = glue::glue("{sprintf('%.1f', q50)}"),
+          Average3 = glue::glue("-{sprintf('%.1f', q60)}"),
+          SomewhatHigh = glue::glue(">{sprintf('%.1f', q60)}-{sprintf('%.1f', q75)}"),
+          High = glue::glue(">{sprintf('%.1f', q75)}-{sprintf('%.1f', q90)}"),
+          VeryHigh = glue::glue(">{sprintf('%.1f', q90)}")
+          ) %>% 
+  select(!c(4:10, agegroup_5)) %>% 
+  relocate(n, .after = VeryHigh) %>% 
+  relocate(Age, .before = VeryLow) |> 
+   filter(
+    Age != "NA yrs",
+    Gender != "Other"
+  )
+
+
+Ab |> gt::gt()|>
+  opt_interactive(
+    use_search = TRUE,
+    use_filters = TRUE,
+    use_resizers = TRUE,
+    use_highlight = TRUE,
+    use_compact_mode = TRUE,
+    use_text_wrapping = FALSE,
+    use_page_size_select = TRUE
+  )
+
+```
+
+
+
+
+# Plot of deciles for the EB and Astrand test
+
+### EB
+
+```{r}
+
+
+
+
+smooth_data <- dfc %>%
+  filter(DiagHighBloodPressure == "N",
+         HeartMedicine == "N",
+         PulseMedicine == "N",
+         TobaccoSmoking == 5,
+         Age >= 20,
+         Age <= 65,
+         Gender != "Other") |>
+  #drop_na(EkB_rel_VO2, Age) %>%
+  group_by(Gender, Age) %>%
+  mutate(percentile = ntile(EkB_rel_VO2, 10),
+         percentileA = ntile(Astrand_rel_VO2, 10)) |>
+  ungroup() |>
+  drop_na(percentile, Gender, Age)
+
+text_data <- smooth_data %>%
+   group_by(Gender, Age) %>%
+  mutate(percentile = ntile(EkB_rel_VO2, 10),
+         percentileA = ntile(Astrand_rel_VO2, 10)) |> 
+  filter(Age==20) |> 
+  group_by(Gender, percentile) %>%
+  summarise(max_age = max(Age),
+            min_age = min(Age),
+            minvo2 = mean(EkB_rel_VO2),
+            minvo2A = mean(Astrand_rel_VO2)) %>%
+  ungroup()
+
+ggplot(smooth_data, aes(Age, EkB_rel_VO2, group = percentile, color = as.character(percentile))) +
+  geom_point(alpha=0.1, shape=21
+             )+
+  geom_smooth(
+    aes( group = percentile),
+    color= "gray30",
+    se = TRUE,
+    fullrange = FALSE,
+    span = 0.9
+  ) +
+  geom_text(
+    data = text_data,
+    aes(x = 15, y = minvo2, 
+        label = paste0(percentile, "%")),
+    color = "black",
+    hjust = 0,
+    show.legend = FALSE
+  ) +
+  facet_wrap(~Gender) +
+  scale_color_viridis_d(option = "rocket")+
+  theme_minimal() +
+  labs(title = "EB") +
+  xlim(c(10, 65)) + # Adjust the x-axis limits max(text_data$max_age+10))
+  
+theme(legend.position = "none")
+
+
+
+
+
+  
+```
+
+### L/min
+
+```{r}
+
+smooth_data <- dfc %>%
+  filter(DiagHighBloodPressure == "N",
+         HeartMedicine == "N",
+         PulseMedicine == "N",
+         TobaccoSmoking == 5,
+         Age >= 20,
+         Age <= 65,
+         Gender != "Other") |>
+  #drop_na(EkB_rel_VO2, Age) %>%
+  group_by(Gender, Age) %>%
+  mutate(percentile = ntile(EkB_MaxVO2, 10),
+         percentileA = ntile(Astrand_rel_VO2, 10)) |>
+  ungroup() |>
+  drop_na(percentile, Gender, Age)
+
+text_data <- smooth_data %>%
+   group_by(Gender, Age) %>%
+  mutate(percentile = ntile(EkB_MaxVO2, 10),
+         percentileA = ntile(Astrand_rel_VO2, 10)) |> 
+  filter(Age==20) |> 
+  group_by(Gender, percentile) %>%
+  summarise(max_age = max(Age),
+            min_age = min(Age),
+            minvo2 = mean(EkB_MaxVO2),
+            minvo2A = mean(Astrand_rel_VO2)) %>%
+  ungroup()
+
+ggplot(smooth_data, aes(Age, EkB_MaxVO2, group = percentile, color = as.character(percentile))) +
+  geom_point(alpha=0.1, shape=21
+             )+
+  geom_smooth(
+    aes( group = percentile, ),
+    color= "gray30",
+    se = TRUE,
+    fullrange = FALSE,
+    span = 0.9
+  ) +
+  geom_text(
+    data = text_data,
+    aes(x = 15, y = minvo2, 
+        label = paste0(percentile, "%")),
+    color = "black",
+    hjust = 0,
+    show.legend = FALSE
+  ) +
+  facet_wrap(~Gender) +
+  scale_color_viridis_d(option = "B")+
+  theme_minimal() +
+  labs(title = "EB") +
+  xlim(c(10, 65)) + # Adjust the x-axis limits max(text_data$max_age+10))
+  ylim(c(0.5, 7)) +
+theme(legend.position = "none")
+```
+
+#### Åstrand
+
+```{r}
+
+
+
+smooth_data <- dfc %>%
+  filter(DiagHighBloodPressure == "N",
+         HeartMedicine == "N",
+         PulseMedicine == "N",
+         TobaccoSmoking == 5,
+         Age >= 20,
+         Age <= 65,
+         Gender != "Other") |>
+  #drop_na(EkB_rel_VO2, Age) %>%
+  group_by(Gender, Age) %>%
+  mutate(percentile = ntile(EkB_rel_VO2, 10),
+         percentileA = ntile(Astrand_rel_VO2, 10)) |>
+  ungroup() |>
+  drop_na(percentileA, Gender, Age)
+
+text_data <- smooth_data %>%
+   group_by(Gender, Age) %>%
+  mutate(percentile = ntile(EkB_rel_VO2, 10),
+         percentileA = ntile(Astrand_rel_VO2, 10)) |> 
+  filter(Age==20) |> 
+  group_by(Gender, percentileA) %>%
+  summarise(max_age = max(Age),
+            min_age = min(Age),
+            minvo2 = mean(EkB_rel_VO2),
+            minvo2A = mean(Astrand_rel_VO2)) %>%
+  ungroup()
+
+ggplot(smooth_data, aes(Age, Astrand_rel_VO2, group = percentileA, color = as.character(percentileA))) +
+  geom_point(alpha=0.1, shape=21
+             )+
+  geom_smooth(
+    aes( group = percentileA ),
+    color= "gray30",
+    se = TRUE,
+    fullrange = FALSE,
+    span = 0.9
+  ) +
+  geom_text(
+    data = text_data,
+    aes(x = 15, y = minvo2A, 
+        label = paste0(percentileA, "%")),
+    color = "black",
+    hjust = 0,
+    show.legend = FALSE
+  ) +
+  facet_wrap(~Gender) +
+  scale_color_viridis_d(option = "rocket")+
+  theme_minimal() +
+  labs(title = "Astrand") +
+  xlim(c(10, 65)) + # Adjust the x-axis limits max(text_data$max_age+10))
+theme(legend.position = "none")
+
+
+
+
+```
+
+### L/min
+
+```{r}
+
+
+
+smooth_data <- dfc %>%
+  filter(DiagHighBloodPressure == "N",
+         HeartMedicine == "N",
+         PulseMedicine == "N",
+         TobaccoSmoking == 5,
+         Age >= 20,
+         Age <= 65,
+         Gender != "Other") |>
+  #drop_na(EkB_rel_VO2, Age) %>%
+  group_by(Gender, Age) %>%
+  mutate(percentile = ntile(EkB_rel_VO2, 10),
+         percentileA = ntile(Astrand_MaxVO2, 10)) |>
+  ungroup() |>
+  drop_na(percentileA, Gender, Age)
+
+text_data <- smooth_data %>%
+   group_by(Gender, Age) %>%
+  mutate(percentile = ntile(EkB_rel_VO2, 10),
+         percentileA = ntile(Astrand_MaxVO2, 10)) |> 
+  filter(Age==20) |> 
+  group_by(Gender, percentileA) %>%
+  summarise(max_age = max(Age),
+            min_age = min(Age),
+            minvo2 = mean(EkB_rel_VO2),
+            minvo2A = mean(Astrand_MaxVO2)) %>%
+  ungroup()
+
+ggplot(smooth_data, aes(Age, Astrand_MaxVO2, group = percentileA, color = as.character(percentileA))) +
+  geom_point(alpha=0.1, shape=21
+             )+
+  geom_smooth(
+    aes( group = percentileA ),
+    color= "gray30",
+    se = TRUE,
+    fullrange = FALSE,
+    span = 0.9
+  ) +
+  geom_text(
+    data = text_data,
+    aes(x = 15, y = minvo2A, 
+        label = paste0(percentileA, "%")),
+    color = "black",
+    hjust = 0,
+    show.legend = FALSE
+  ) +
+  facet_wrap(~Gender) +
+  scale_color_viridis_d(option = "mako")+
+  theme_minimal() +
+  labs(title = "Astrand") +
+  xlim(c(10, 65)) + # Adjust the x-axis limits max(text_data$max_age+10))
+  ylim(c(0.5, 7)) +
+theme(legend.position = "none")
+
+
+
+
+```
+
+```{r}
+  # smothed lines from raw data
+# dfc %>%  
+#   filter(DiagHighBloodPressure == "N", 
+#          HeartMedicine == "N", 
+#          PulseMedicine == "N", 
+#          TobaccoSmoking == 5, 
+#          Age >= 20,
+#          Gender != "Other") |> 
+#   drop_na(EkB_rel_VO2, agegroup_6) %>% 
+#   group_by(Gender, Age) %>% 
+#   mutate(percentile = ntile(EkB_rel_VO2, 10)) |> 
+#   ungroup() |> 
+#   drop_na(percentile, Gender, Age) |> 
+#   ggplot(aes(Age, EkB_rel_VO2,  group = percentile, color = as.character(percentile))) +
+#   
+#    #geom_bin2d( aes(fill =  as.character(percentile)), alpha = 0.5) +
+#   geom_text(aes(label = paste0(percentile, "%")), vjust = -1.5, color = "black") +  # Add the percentile labels
+#  # geom_contour_filled( aes(fill =  as.character(percentile))) +
+#    # geom_point(alpha=0.01) +
+#  # geom_tile(
+#  # interpolate = TRUE,
+#  #  alpha = 0.02,
+#  #   aes(fill =  as.character(percentile))) +
+#   #  geom_line( aes(group = percentile), se = FALSE) +
+#   geom_smooth(
+#     aes(group = percentile),
+#     se = TRUE,
+#     fullrange = FALSE,
+#     span = 0.9
+#   ) +
+#   facet_wrap(~Gender) +
+#  # scale_y_continuous(limits = c(10,70)) +
+#   theme_minimal() +
+#   labs(title = "EB")
+# 
+# # per agegroup
+# dfc %>%  
+#   filter(DiagHighBloodPressure == "N", 
+#          HeartMedicine == "N", 
+#          PulseMedicine == "N", 
+#          TobaccoSmoking == 5, 
+#          Gender != "Other") |> 
+#   drop_na(EkB_rel_VO2, agegroup_6) %>% 
+#   group_by(Gender, agegroup_6) %>% 
+#   reframe(
+#     mean = quantile(EkB_rel_VO2, c(.1,.25,.40,.50,.60,.75,.9)), 
+#     percentile = c(.1,.25,.40,.50,.60,.75,.9),
+#     n=n()
+#   ) %>% 
+#   #  ungroup() %>% 
+#   mutate(
+#     mean = round(mean,1),
+#     percentile = percentile*100
+#   ) |> 
+#   ggplot(aes(agegroup_6,mean,  group = percentile, color = as.character(percentile))) +
+#   geom_point(alpha=0.8)+
+#   geom_line( aes(group = percentile), se = FALSE) +
+#   facet_wrap(~Gender) +
+#   
+#   scale_y_continuous(limits = c(20,65)) +
+#   theme_minimal() +
+#   labs(title = "EB")
+
+
+```
+
+```{r}
+
+
+
+# 
+# dfc %>%  
+#   filter(DiagHighBloodPressure == "N", 
+#          HeartMedicine == "N", 
+#          PulseMedicine == "N", 
+#          TobaccoSmoking == 5, 
+#          Gender != "Other") |> 
+#   drop_na(Astrand_rel_VO2, agegroup_6) %>% 
+#   group_by(Gender, agegroup_6) %>% 
+#   reframe(
+#     mean = quantile(Astrand_rel_VO2, c(.1,.25,.40,.50,.60,.75,.9)), 
+#     percentile = c(.1,.25,.40,.50,.60,.75,.9),
+#     n=n()
+#   ) %>% 
+#   #  ungroup() %>% 
+#   mutate(
+#     mean = round(mean,1),
+#     percentile = percentile*100
+#   ) |> 
+#   ggplot(aes(agegroup_6,mean,  group = percentile, color = as.character(percentile))) +
+#   geom_point(alpha=0.8)+
+#   geom_line( aes(group = percentile), se = FALSE) +
+#   facet_wrap(~Gender) +
+#   
+#   scale_y_continuous(limits = c(20,65)) +
+#     theme_minimal() +
+#   labs(title = "Åstrand")
+# 
+# # mean for each Age (year) and decile
+# 
+# dfc %>%  
+#   filter(DiagHighBloodPressure == "N", 
+#          HeartMedicine == "N", 
+#          PulseMedicine == "N", 
+#          TobaccoSmoking == 5, 
+#          Gender != "Other") |> 
+#   drop_na(Astrand_rel_VO2, agegroup_6) %>% 
+#   group_by(Gender, Age) %>% 
+#   mutate(percentile = ntile(Astrand_rel_VO2, 10)) |> 
+#   group_by(Gender, Age,percentile) %>%  
+#   summarize(mean_Astrand_rel_VO2 = mean(Astrand_rel_VO2))|> 
+#       ggplot(aes(Age, mean_Astrand_rel_VO2,  group = percentile, color = as.character(percentile))) +
+#  # geom_point(alpha=0.8) +
+#   #  geom_line( aes(group = percentile), se = FALSE) +
+#     geom_smooth( aes(group = percentile), se = FALSE) +
+#   facet_wrap(~Gender) +
+#   
+#   scale_y_continuous(limits = c(10,70)) +
+#     theme_minimal() +
+#   labs(title = "Åstrand")
+#   
+#   
+#   # smothed lines from raw data
+# 
+# dfc %>%  
+#   filter(DiagHighBloodPressure == "N", 
+#          HeartMedicine == "N", 
+#          PulseMedicine == "N", 
+#          TobaccoSmoking == 5, 
+#          Age >= 20,
+#          Gender != "Other") |> 
+#   drop_na(Astrand_rel_VO2, agegroup_6) %>% 
+#   group_by(Gender, Age) %>% 
+#   mutate(percentile = ntile(Astrand_rel_VO2, 10)) |> 
+#   ungroup() |> 
+#   drop_na(percentile, Gender, Age) |> 
+#   ggplot(aes(Age, Astrand_rel_VO2,  group = percentile, color = as.character(percentile))) +
+#   # geom_point(alpha=0.01) +
+#   geom_tile(
+#    interpolate = TRUE, 
+#    alpha = 0.02,
+#     aes(fill =  as.character(percentile))) +
+#   #  geom_line( aes(group = percentile), se = FALSE) +
+#   geom_smooth( 
+#     aes(group = percentile), 
+#     se = TRUE,
+#     fullrange = FALSE,
+#     span = 0.9,
+#    # method = "loess"
+#   ) +
+#   facet_wrap(~Gender) +
+#   scale_y_continuous(limits = c(10,70)) +
+#   theme_minimal() +
+#   labs(title = "Åstrand")
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+#   
+#   reframe(
+#     mean = quantile(Astrand_rel_VO2, c(.1,.25,.40,.50,.60,.75,.9)), 
+#     percentile = c(.1,.25,.40,.50,.60,.75,.9),
+#     n=n()
+#   ) %>% 
+#   #  ungroup() %>% 
+#   mutate(
+#     mean = round(mean,1),
+#     percentile = percentile*100
+#   ) |> 
+#   ggplot(aes(agegroup_6,mean,  group = percentile, color = as.character(percentile))) +
+#  # geom_point(alpha=0.8)+
+#   geom_line( aes(group = percentile), se = FALSE) +
+#   facet_wrap(~Gender) +
+#   
+#   scale_y_continuous(limits = c(20,65)) +
+#     theme_minimal() +
+#   labs(title = "Åstrand")
+# 
+# 
+# dfc %>%  
+#   filter(DiagHighBloodPressure == "N", 
+#          HeartMedicine == "N", 
+#          PulseMedicine == "N", 
+#          TobaccoSmoking == 5, 
+#          Gender != "Other") |> 
+#   drop_na(Astrand_rel_VO2, agegroup_6) %>% 
+#   group_by(Gender, agegroup_6) %>% 
+#   reframe(
+#     mean = quantile(Astrand_rel_VO2, c(.1,.25,.40,.50,.60,.75,.9)), 
+#     percentile = c(.1,.25,.40,.50,.60,.75,.9),
+#     n=n()
+#   ) %>% 
+#   #  ungroup() %>% 
+#   mutate(
+#     mean = round(mean,1),
+#     percentile = percentile*100
+#   ) |> 
+#   ggplot(aes(agegroup_6,mean,  group = percentile, color = as.character(percentile))) +
+#   geom_point(alpha=0.8)+
+#   geom_line( aes(group = percentile), se = FALSE) +
+#   facet_wrap(~Gender) +
+#   
+#   scale_y_continuous(limits = c(20,65)) +
+#     theme_minimal() +
+#   labs(title = "Åstrand")
+```

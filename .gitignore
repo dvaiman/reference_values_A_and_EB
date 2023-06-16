@@ -49,7 +49,8 @@ po/*~
 rsconnect/
 
 # data files
-.csv
-.sav
-.sas
-.xls
+*.csv
+*.sav
+*.sas
+*.xls
+git rm --cached *.csv

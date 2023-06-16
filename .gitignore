@@ -54,3 +54,10 @@ rsconnect/
 *.sas
 *.xls
 git rm --cached *.csv
+
+# results files
+*.html
+*.pdf
+
+# project file
+.Rproj

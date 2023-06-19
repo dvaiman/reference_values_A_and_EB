@@ -26,19 +26,22 @@ df <- read_csv2(here::here("data", "2014-2022.csv"))
 #library(readxl)
 #X2014_2022 <- read_excel("fitness reference values ekblom and astrand/data/2014-2022.xlsx")
 
+
 ```
 
--   Exkludera de gulmarkerade ovan.
--   Gör tabeller såsom i abstarctet som presenterades i Kuopio
--   Ev figurer som illustrerar -- se inspiration tidigare artiklar
--   Gör separata tabeller för a) rökare + ev irregular, b) heart medicine, pulse medicine och diagHighBP.
+# Objectives
+
+-   comparison of HUNT, EB, and Åstrand values
+-   reference tables for, non-smokers, smokers, c) heart medicine, pulse medicin and diagHighBP.
+-   plots of percentiles of the eb test
 
 # Clean data
 
 ```{r}
 
 dfc <- df %>% 
-  mutate(Astrand_rel_VO2 = Astrand_MaxVO2 / WeightKG * 1000,
+  mutate(
+    Astrand_rel_VO2 = Astrand_MaxVO2 / WeightKG * 1000,
          EkB_rel_VO2 = EkB_MaxVO2 / WeightKG * 1000,
          Age = case_when(Age < 14 ~ NA_real_, # have to take away individuals not ages
                          Age > 85 ~ NA_real_,
@@ -78,7 +81,7 @@ dfc <- df %>%
          WorkPulseHighWatt_atest = case_when(WorkPulseHighWatt < 108 ~ NA_real_,
                                              WorkPulseHighWatt > 170 ~ NA_real_,
                                              TRUE ~ WorkPulseHighWatt),
-         Astrand_rel_VO2 = case_when(Astrand_rel_VO2 < 15 | Astrand_rel_VO2 > 80 ~ NA_real_,
+         Astrand_rel_VO2 = case_when(Astrand_rel_VO2 < 15 | Astrand_rel_VO2 > 90 ~ NA_real_,
                                      TRUE ~ Astrand_rel_VO2),
          WorkPulseLowWatt_EkB = case_when(WorkPulseLowWatt < 51 ~ NA_real_,
                                           WorkPulseLowWatt > 140 ~ NA_real_,
@@ -86,10 +89,10 @@ dfc <- df %>%
          WorkPulseHighWatt_EkB = case_when(WorkPulseHighWatt < 70 ~ NA_real_,
                                            WorkPulseHighWatt > 180 ~ NA_real_,
                                            TRUE ~ WorkPulseHighWatt),
-         EkB_rel_VO2 = case_when(EkB_rel_VO2 < 24 & Gender == "Male" ~ NA_real_,
-                                 EkB_rel_VO2 > 76 & Gender == "Male" ~ NA_real_,
-                                 EkB_rel_VO2 < 19 & Gender == "Female" ~ NA_real_,
-                                 EkB_rel_VO2 > 62 & Gender == "Female" ~ NA_real_,
+         EkB_rel_VO2 = case_when(EkB_rel_VO2 < 15 & Gender == "Male" ~ NA_real_,# 24
+                                 EkB_rel_VO2 > 90 & Gender == "Male" ~ NA_real_, # 76
+                                 EkB_rel_VO2 < 15 & Gender == "Female" ~ NA_real_, #"19"
+                                 EkB_rel_VO2 > 90 & Gender == "Female" ~ NA_real_, #62
                                  TRUE ~ EkB_rel_VO2),
          FinalWattFactor = (WorkPulseHighWatt_EkB - WorkPulseLowWatt_EkB) / (FinalWatt - 30),
          EkB_rel_VO2 = case_when(FinalWattFactor < 0.2 | FinalWattFactor >1 ~ NA_real_,
@@ -384,7 +387,7 @@ elmin2 |> make_reference_table()
 
 ```
 
-### these with high bloodpressure or using blood or pulse medicin but not smoking
+### those with high bloodpressure or using blood or pulse medicin but not smoking
 
 ### ml
 
@@ -518,8 +521,12 @@ Ab |>
 
 functions
 
+mean = quantile({{ variable }}, c(.1, .25, .50, .75, .9)),
+
+percentile = c(.1, .25, .50, .75, .9)
+
 ```{r}
-plot_smooth_data <- function(df, variable, xlim = c(10, 65), ylim = NULL, title = "EB") {
+plot_smooth_data <- function(df, variable, xlim = NULL, ylim = NULL, title = NULL) {
   smooth_data <- df %>%
     filter(DiagHighBloodPressure == "N",
            HeartMedicine == "N",
@@ -529,7 +536,9 @@ plot_smooth_data <- function(df, variable, xlim = c(10, 65), ylim = NULL, title 
            Age <= 65,
            Gender != "Other") %>%
     group_by(Gender, Age) %>%
-    mutate(percentile = ntile({{ variable }}, 10)) %>%
+    mutate(
+      percentile = ntile({{ variable }}, 3)
+      ) %>%
     ungroup() %>%
     drop_na(percentile, Gender, Age)
 
@@ -549,20 +558,75 @@ plot_smooth_data <- function(df, variable, xlim = c(10, 65), ylim = NULL, title 
                 fullrange = FALSE,
                 span = 0.9) +
     geom_text(data = text_data,
-              aes(x = 15, y = minvo2,
-                  label = paste0(percentile, "%")),
+              aes(x = 13, y = minvo2,
+                  label = paste0(percentile * 25, "%")),
               color = "black",
               hjust = 0,
               show.legend = FALSE) +
     facet_wrap(~ Gender) +
-    scale_color_viridis_d(option = "rocket") +
-    theme_minimal() +
-    labs(title = {{title}}) +
-    xlim(xlim) +
+    #scale_color_viridis_d(option = "rocket") +
+    scale_color_manual(values = c("#291535", "#2f6b8e", "#291535")) +
+    theme_minimal(
+        base_size = 14,
+  base_family = "Roboto",
+    ) +
+    scale_x_continuous(expand = c(0,0), limits = xlim) +
     ylim(ylim) +
+     labs(title = {{title}}) +
     theme(legend.position = "none")
 }
 
+
+
+
+
+plot_smooth_data <- function(df, variable, xlim = NULL, ylim = NULL, title = NULL) {
+  smooth_data <- df %>%
+    filter(DiagHighBloodPressure == "N",
+           HeartMedicine == "N",
+           PulseMedicine == "N",
+           TobaccoSmoking == 5,
+           Age >= 20,
+           Age <= 65,
+           Gender != "Other") %>%
+    group_by(Gender, Age) %>%
+    mutate(
+      percentile = cut({{ variable }}, quantile({{ variable }}, c(0, 0.1, 0.25, 0.5, 0.75, 0.9, 1), na.rm = TRUE), include.lowest = TRUE, labels = FALSE),
+      label_percentile = cut({{ variable }}, quantile({{ variable }}, c(0, 0.1, 0.25, 0.5, 0.75, 0.9, 1), na.rm = TRUE), include.lowest = TRUE, labels = c("10%", "25%", "50%", "75%", "90%"))
+    ) %>%
+    ungroup() %>%
+    drop_na(percentile, Gender, Age)
+
+  text_data <- smooth_data %>%
+    filter(Age == 20) %>%
+    group_by(Gender, percentile) %>%
+    summarise(max_age = max(Age),
+              min_age = min(Age),
+              minvo2 = mean({{ variable }}),
+              label_percentile = first(label_percentile)) %>%
+    ungroup()
+
+  ggplot(smooth_data, aes(Age, {{ variable }}, group = percentile, color = as.character(percentile))) +
+    geom_point(alpha = 0.1, shape = 21) +
+    geom_smooth(aes(group = percentile),
+                color = "gray30",
+                se = TRUE,
+                fullrange = FALSE,
+                span = 0.9) +
+    geom_text(data = text_data,
+              aes(x = 13, y = minvo2,
+                  label = label_percentile),
+              color = "black",
+              hjust = 0,
+              show.legend = FALSE) +
+    facet_wrap(~ Gender) +
+    scale_color_manual(values = c("#291535", "#2f6b8e", "#291535", "#2f6b8e", "#291535", "#2f6b8e", "#291535")) +
+    theme_minimal(base_size = 14, base_family = "Roboto") +
+    scale_x_continuous(expand = c(0, 0), limits = xlim) +
+    ylim(ylim) +
+    labs(title = title) +
+    theme(legend.position = "none")
+}
 
 
 
@@ -583,7 +647,7 @@ plot_smooth_data(dfc, EkB_MaxVO2, xlim = c(10, 65), ylim = c(0.5, 7), title = "E
 
 ```{r}
 
-plot_smooth_data(dfc, Astrand_rel_VO2, xlim = c(10, 65), ylim = c(10,80), title = "Åstrand mL")
+plot_smooth_data(dfc, Astrand_rel_VO2, xlim = c(10, 65), ylim = c(10,90), title = "Åstrand mL")
 
 
 ```

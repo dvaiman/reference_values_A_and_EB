@@ -35,6 +35,8 @@ df <- read_csv2(here::here("data", "2014-2022.csv"))
 -   reference tables for, non-smokers, smokers, c) heart medicine, pulse medicin and diagHighBP.
 -   plots of percentiles of the eb test
 
+Q groups 0-10 11-25 26-40 41-60 61-75 76-90 91-100 color gradients: https://colorhunt.co/palettes/gradient
+
 # Clean data
 
 ```{r}
@@ -81,7 +83,8 @@ dfc <- df %>%
          WorkPulseHighWatt_atest = case_when(WorkPulseHighWatt < 108 ~ NA_real_,
                                              WorkPulseHighWatt > 170 ~ NA_real_,
                                              TRUE ~ WorkPulseHighWatt),
-         Astrand_rel_VO2 = case_when(Astrand_rel_VO2 < 15 | Astrand_rel_VO2 > 90 ~ NA_real_,
+         Astrand_rel_VO2 = case_when(Astrand_rel_VO2 < 15 | 
+                                       Astrand_rel_VO2 > 80 ~ NA_real_,
                                      TRUE ~ Astrand_rel_VO2),
          WorkPulseLowWatt_EkB = case_when(WorkPulseLowWatt < 51 ~ NA_real_,
                                           WorkPulseLowWatt > 140 ~ NA_real_,
@@ -90,9 +93,9 @@ dfc <- df %>%
                                            WorkPulseHighWatt > 180 ~ NA_real_,
                                            TRUE ~ WorkPulseHighWatt),
          EkB_rel_VO2 = case_when(EkB_rel_VO2 < 15 & Gender == "Male" ~ NA_real_,# 24
-                                 EkB_rel_VO2 > 90 & Gender == "Male" ~ NA_real_, # 76
+                                 EkB_rel_VO2 > 80 & Gender == "Male" ~ NA_real_, # 76
                                  EkB_rel_VO2 < 15 & Gender == "Female" ~ NA_real_, #"19"
-                                 EkB_rel_VO2 > 90 & Gender == "Female" ~ NA_real_, #62
+                                 EkB_rel_VO2 > 80 & Gender == "Female" ~ NA_real_, #62
                                  TRUE ~ EkB_rel_VO2),
          FinalWattFactor = (WorkPulseHighWatt_EkB - WorkPulseLowWatt_EkB) / (FinalWatt - 30),
          EkB_rel_VO2 = case_when(FinalWattFactor < 0.2 | FinalWattFactor >1 ~ NA_real_,
@@ -117,15 +120,16 @@ dfc <- df %>%
                                 Age >= 25  & Age <= 34 ~ '25-34',
                                 Age >= 18  & Age <= 24 ~ '18-24'),
            agegroup_5 = case_when(
-    Age >= 20 & Age <= 25 ~ "20-25 yrs",
-    Age >= 26 & Age <= 30 ~ "26-30 yrs",
-    Age >= 31 & Age <= 35 ~ "31-35 yrs",
-    Age >= 36 & Age <= 40 ~ "36-40 yrs",
-    Age >= 41 & Age <= 45 ~ "41-45 yrs",
-    Age >= 46 & Age <= 50 ~ "46-50 yrs",
-    Age >= 51 & Age <= 55 ~ "51-55 yrs",
-    Age >= 56 & Age <= 60 ~ "56-60 yrs",
-    Age >= 61 & Age <= 65 ~ "61-65 yrs",
+    Age >= 20 & Age <= 24 ~ "20-24 yrs",
+    Age >= 25 & Age <= 29 ~ "25-29 yrs",
+    Age >= 30 & Age <= 34 ~ "30-34 yrs",
+    Age >= 35 & Age <= 39 ~ "35-39 yrs",
+    Age >= 40 & Age <= 44 ~ "40-44 yrs",
+    Age >= 45 & Age <= 49 ~ "45-49 yrs",
+    Age >= 50 & Age <= 54 ~ "50-54 yrs",
+    Age >= 55 & Age <= 59 ~ "55-59 yrs",
+    Age >= 60 & Age <= 64 ~ "60-64 yrs",
+    Age >= 65 & Age <= 69 ~ "65-69 yrs",
     TRUE ~ NA_character_
   ),
   AgeGroup = case_when(
@@ -143,7 +147,8 @@ dfc <- df %>%
                                    Astrand_rel_VO2 >= 32 ~ 0)) %>% 
    mutate_all(~replace(., . == 0, NA)) |> 
   #create id numbers
-  mutate(id = row_number())
+  mutate(id = row_number()) |> 
+   filter(Gender != "Other") 
 
 
 
@@ -154,6 +159,85 @@ dfc <- dfc |> filter(id != 24939)
 # filter(Age>65, EkB_rel_VO2>65) |> select(id)
 
 #write_csv(dfc, here::here("fitness reference values ekblom and astrand", "data", "2014-2022_clean.csv"))
+```
+
+# descriptive table
+
+```{r}
+
+
+table1 <-
+bind_cols(
+  dfc %>%
+    filter(Gender != "Other",
+           !is.na(agegroup_5),
+           TobaccoSmoking == 5,
+           !is.na(EkB_rel_VO2)) %>%
+    group_by(Gender, agegroup_5) %>%
+    summarize(
+      Exercise = glue("{round(mean(if_else(ExerciseAnswer>=4, 1, 0)*100, na.rm=TRUE),0)}%"),
+      across(c(EkB_rel_VO2, BMI, WeightKG, HeightCM),
+             list(mean = mean, sd = sd), na.rm = TRUE),
+      n_EkB = sum(!is.na(EkB_rel_VO2))
+    ) %>%
+    mutate(
+      Exercise_ekb = Exercise,
+      BMI_ekb = sprintf("%.1f ±%.1f", round(BMI_mean, 1), round(BMI_sd, 1)),
+      WeightKG_ekb = sprintf("%.1f ±%.1f", round(WeightKG_mean, 1), round(WeightKG_sd, 1)),
+      HeightCM_ekb = sprintf("%.1f ±%.1f", round(HeightCM_mean, 1), round(HeightCM_sd, 1))
+    ) %>%
+    select(-ends_with("_mean"), -ends_with("_sd"), -Exercise),
+  
+  dfc %>%
+    filter(Gender != "Other",
+           !is.na(agegroup_5),
+           TobaccoSmoking == 5,
+           !is.na(Astrand_rel_VO2)) %>%
+    group_by(Gender, agegroup_5) %>%
+    summarize(
+      Exercise = glue("{round(mean(if_else(ExerciseAnswer>=4, 1, 0)*100, na.rm=TRUE),0)}%"),
+      across(c(Astrand_rel_VO2, BMI, WeightKG, HeightCM),
+             list(mean = mean, sd = sd), na.rm = TRUE),
+      n_Astrand = sum(!is.na(Astrand_rel_VO2))
+    ) %>%
+    mutate(
+      Exercise_Astrand = Exercise,
+      BMI_Astrand = sprintf("%.1f ±%.1f", round(BMI_mean, 1), round(BMI_sd, 1)),
+      WeightKG_Astrand = sprintf("%.1f ±%.1f", round(WeightKG_mean, 1), round(WeightKG_sd, 1)),
+      HeightCM_Astrand = sprintf("%.1f ±%.1f", round(HeightCM_mean, 1), round(HeightCM_sd, 1))
+    ) %>%
+    ungroup() %>%
+    select(-ends_with("_mean"), -ends_with("_sd"), -Gender, - agegroup_5, -Exercise)
+) %>%
+  
+  
+ # mutate(AgeGroup = fct_relevel(agegroup_5, c("20-29 years", "30-39 years", "40-49 years", "50-59 years", "60-69 years", "+70 years"))) %>%
+  arrange(Gender, agegroup_5) %>%
+  select(agegroup_5, Gender, n_EkB, n_Astrand, BMI_ekb, BMI_Astrand, WeightKG_ekb, WeightKG_Astrand, HeightCM_ekb, HeightCM_Astrand, Exercise_ekb, Exercise_Astrand) |> 
+  mutate(
+    agegroup_5 = str_remove(agegroup_5, " yrs"),
+    Gender = case_when(
+    Gender == "Female" ~ "Women",
+    Gender == "Male" ~ "Men",
+    TRUE ~ Gender
+  )
+  ) |> 
+   mutate(across(c(BMI_ekb, BMI_Astrand, WeightKG_ekb, WeightKG_Astrand, HeightCM_ekb, HeightCM_Astrand, Exercise_ekb, Exercise_Astrand),
+                as.character))
+
+
+table1 |> 
+  gt::gt()|>
+  opt_interactive(
+    use_search = TRUE,
+    use_filters = TRUE,
+    use_resizers = TRUE,
+    use_highlight = TRUE,
+    use_compact_mode = TRUE,
+    use_text_wrapping = FALSE,
+    use_page_size_select = TRUE
+  )
+
 ```
 
 ## HUNT study data
@@ -169,11 +253,9 @@ hunt <-
 ) %>%
   mutate(
     hunt_VO2_Lmin = str_replace_all(hunt_VO2_Lmin, "\\+\\s*", "±"),
-         hunt_VO2_mLkgmin = str_replace_all(hunt_VO2_mLkgmin, "\\+\\s*", "±")
-         ) |> 
-  filter(
-    AgeGroup != "All"
-  )
+    hunt_VO2_mLkgmin = str_replace_all(hunt_VO2_mLkgmin, "\\+\\s*", "±")
+  ) %>%
+  filter(AgeGroup != "All") 
 
 
 ```
@@ -210,6 +292,7 @@ hpi <-
 
 ```{r}
 merged_df <- full_join(hunt, hpi) |> 
+  as_tibble() |> 
   select(
     AgeGroup, 
     Gender, 
@@ -221,13 +304,15 @@ merged_df <- full_join(hunt, hpi) |>
     Astrand_VO2_mLkgmin, 
     hunt_VO2_Lmin, 
     EkB_VO2_Lmin, 
-    Astrand_VO2_Lmin)
+    Astrand_VO2_Lmin) |> 
+     mutate(across(c(EkB_VO2_mLkgmin, Astrand_VO2_mLkgmin  , EkB_VO2_Lmin , Astrand_VO2_Lmin),
+                as.character))
 
 
 
 ```
 
-### Hunt vs EB vs Åstrandtest
+### Hunt vs EB vs Åstrandtest table
 
 ### ml and L
 
@@ -245,44 +330,231 @@ merged_df |>
   )
 ```
 
+# HUNT plot data
+
+```{r}
+# merged_df |>  count(AgeGroup)
+#   pivot_longer(cols = c(EkB_VO2_mLkgmin, Astrand_VO2_mLkgmin, EkB_VO2_Lmin,Astrand_VO2_Lmin  ),
+#                names_to = "category",
+#                values_to = "vo2") |> 
+#     separate(vo2, into = c("mean", "sd"), sep = " ±", remove = FALSE) |> 
+#  # separate(hunt_VO2_mLkgmin, into = c("mean_hunt", "sd_hunt"), sep = " ±", remove = FALSE) |> 
+#   mutate(across(c(mean,sd), as.numeric),
+#          
+#          hunt_VO2 = case_when(
+#     grepl("mLkgmin", category) ~ str_extract(hunt_VO2_mLkgmin, "\\d+\\.\\d+"),
+#     grepl("Lmin", category) ~ str_extract(hunt_VO2_Lmin, "\\d+\\.\\d+"),
+#     TRUE ~ NA_character_
+#   ),
+#   mll = case_when(
+#     grepl("mLkgmin", category) ~ "mLkgmin",
+#     grepl("Lmin", category) ~ "Lmin",
+#     TRUE ~ NA_character_
+#   ),
+#   relative_difference = (as.numeric(hunt_VO2) - mean) / mean * 100,
+#   ) |> 
+#     ggplot(aes(relative_difference, AgeGroup)) +
+#     geom_col(aes(fill=category), 
+#              position = position_dodge(),
+#              alpha = 0.5) +
+#   facet_wrap(~Gender+ mll, ncol = 2) +
+#   labs(x="relative difference between HUNT and estimated vo2max (%)") +
+#   theme_minimal()
+  
+  merged_df |>
+  pivot_longer(cols = c(EkB_VO2_mLkgmin, Astrand_VO2_mLkgmin, EkB_VO2_Lmin, Astrand_VO2_Lmin),
+               names_to = "category",
+               values_to = "vo2") |>
+  separate(vo2, into = c("mean", "sd"), sep = " ±", remove = FALSE) |>
+  mutate(across(c(mean, sd), as.numeric),
+         hunt_VO2 = case_when(
+           grepl("mLkgmin", category) ~ str_extract(hunt_VO2_mLkgmin, "\\d+\\.\\d+"),
+           grepl("Lmin", category) ~ str_extract(hunt_VO2_Lmin, "\\d+\\.\\d+"),
+           TRUE ~ NA_character_
+         ),
+         mll = case_when(
+           grepl("mLkgmin", category) ~ "mLkgmin",
+           grepl("Lmin", category) ~ "Lmin",
+           TRUE ~ NA_character_
+         ),
+         hunt_VO2 = as.numeric(hunt_VO2),
+         relative_difference = (mean - hunt_VO2) / hunt_VO2 * 100,
+         AgeGroup = fct_relevel(AgeGroup, c("20-29 years", "30-39 years", "40-49 years", "50-59 years", "60-69 years", "+70 years")),
+                              AgeGroup =  fct_rev(AgeGroup)
+  ) |>
+    ggplot(aes(relative_difference, AgeGroup)) +
+    geom_vline(xintercept = 0, color = "grey") +
+    geom_tile(aes(x=c(0),fill = relative_difference), width = 5) +
+  geom_linerange(aes(xmin = 0, xmax = relative_difference, y = AgeGroup, color = category),
+               size = 1,
+               alpha = 0.5,
+               position = position_dodge(width = 1)) +
+  geom_point(aes(x = relative_difference, y = AgeGroup, color = category),
+             size = 3, shape = 21, fill = "white",
+             position = position_dodge(width = 1)) +
+  geom_text(aes(label = sprintf("%.1f%%", relative_difference),
+                x = 0, y = AgeGroup, color = category),
+            position = position_dodge(width = 1),
+            vjust = 0, size = 3.5, fontface = "bold", color = "black") +
+  facet_wrap(~ Gender + mll, ncol = 2) +
+   # coord_flip() +
+  labs(x = "Relative Difference between HUNT and Estimated VO2max (%)",
+       y = "") +
+  theme_minimal() +
+  theme(axis.text.x = element_blank())
+    
+    
+    
+  #   
+  #   
+  # ggplot(aes(relative_difference, AgeGroup)) +
+  # geom_col(aes(fill = category),
+  #          position = position_dodge(),
+  #          alpha = 0.5) +
+  # geom_text(aes(label = sprintf("%.1f%%", relative_difference),
+  #               x = 30, y = AgeGroup,
+  #               fill = category),
+  #           position = position_dodge(width = 1),
+  #           vjust = -0.5, size = 3.5, fontface = "bold", color = "black") +
+  # facet_wrap(~Gender + mll, ncol = 2) +
+  # labs(x = "Relative Difference between HUNT and Estimated VO2max (%)") +
+  # theme_minimal() +
+  # theme(axis.text.x = element_blank())
+  # 
+  # df |> glimpse()
+  
+```
+
+# Violin plot
+
+```{r}
+   dfc %>% 
+ drop_na(EkB_rel_VO2, agegroup_5) %>%
+  filter(Gender != "Other") |> 
+  group_by(Gender, agegroup_5) %>%
+  mutate(
+    percentile100 = ntile(EkB_rel_VO2, 100),
+  percentile_values = case_when(
+    percentile100 <= 10 ~ "0-10",
+    percentile100 <= 25 ~ "11-25",
+    percentile100 <= 40 ~ "26-40",
+    percentile100 <= 60 ~ "41-60",
+    percentile100 <= 75 ~ "61-75",
+    percentile100 <= 90 ~ "76-90",
+    TRUE ~ "91-100"
+  ),
+  percentile_group = case_when(
+    percentile100 <= 10 ~ "VeryLow",
+    percentile100 <= 25 ~ "Low",
+    percentile100 <= 40 ~ "SomewhatLow",
+    percentile100 <= 60 ~ "Average",
+    percentile100 <= 75 ~ "SomewhatHigh",
+    percentile100 <= 90 ~ "High",
+    percentile100 <= 100 ~ "VeryHigh"
+  ),
+  n = n()
+  ) |> 
+  ggplot( aes(x = agegroup_5, y = EkB_rel_VO2)) +
+  geom_violin(fill = "darkgreen") +
+  geom_boxplot(width = .2) +
+  labs(x = "Age Group", y = "EkB_rel_VO2", title = "Violin Plot of EkB_rel_vo2 by Age Group") +
+  facet_wrap(~Gender) +
+  theme_minimal()
+  
+```
+
 # EB reference Table
 
 ### Functions
 
 ```{r}
 
-calculate_percentiles_in_table <- function(df, variable) {
-  df %>%
-    drop_na({{ variable }}, agegroup_5) %>%
-    group_by(Gender, agegroup_5) %>%
-    reframe(mean = quantile({{ variable }}, c(.1, .25, .40, .50, .60, .75, .9)),
-            percentile = c(.1,.25,.40,.50,.60,.75,.9),
-              n = n()) %>%
-    mutate(mean = round(mean, 1),
-           percentile = percentile * 100) %>%
+
+calculate_percentiles_in_table <- 
+  function(df, variable) {
+   df %>% 
+ drop_na({{ variable }}, agegroup_5) %>%
+  group_by(Gender, agegroup_5) %>%
+  mutate(
+    percentile100 = ntile({{ variable }}, 100),
+  percentile_values = case_when(
+    percentile100 <= 10 ~ "0-10",
+    percentile100 <= 25 ~ "11-25",
+    percentile100 <= 40 ~ "26-40",
+    percentile100 <= 60 ~ "41-60",
+    percentile100 <= 75 ~ "61-75",
+    percentile100 <= 90 ~ "76-90",
+    TRUE ~ "91-100"
+  ),
+  percentile_group = case_when(
+    percentile100 <= 10 ~ "VeryLow",
+    percentile100 <= 25 ~ "Low",
+    percentile100 <= 40 ~ "SomewhatLow",
+    percentile100 <= 60 ~ "Average",
+    percentile100 <= 75 ~ "SomewhatHigh",
+    percentile100 <= 90 ~ "High",
+    percentile100 <= 100 ~ "VeryHigh"
+  ),
+  n = n()
+  ) |>
+    group_by(Gender, agegroup_5, percentile_group) |>
+    reframe(
+      range = glue("{min(EkB_rel_VO2, na.rm = TRUE)}-{max(EkB_rel_VO2, na.rm = TRUE)}"),
+      min=round(min(EkB_rel_VO2, na.rm = TRUE),1),
+      max = round(max(EkB_rel_VO2, na.rm = TRUE),1),
+      n = mean(n)
+    ) %>% 
+  #  group_by(Gender, agegroup_5) |>
+    ungroup() |> 
     pivot_wider(id_cols = c(Gender, agegroup_5, n),
-                names_from = percentile,
-                values_from = mean,
-                names_prefix = "q") %>%
-    mutate(Age = glue("{agegroup_5} yrs"),
-           VeryLow = glue("<{sprintf('%.1f', q10)}"),
-           Low = glue(">{sprintf('%.1f', q10)}-{sprintf('%.1f', q25)}"),
-           SomewhatLow = glue(">{sprintf('%.1f', q25)}-{sprintf('%.1f', q40)}"),
-           Average1 = glue(">{sprintf('%.1f', q40)}-"),
-           Average2 = glue("{sprintf('%.1f', q50)}"),
-           Average3 = glue("-{sprintf('%.1f', q60)}"),
-           SomewhatHigh = glue(">{sprintf('%.1f', q60)}-{sprintf('%.1f', q75)}"),
-           High = glue(">{sprintf('%.1f', q75)}-{sprintf('%.1f', q90)}"),
-           VeryHigh = glue(">{sprintf('%.1f', q90)}")
-    ) %>%
-    select(-c(4:10, agegroup_5)) %>%
-    relocate(n, .after = VeryHigh) %>%
-    relocate(Age, .before = VeryLow) %>%
+                names_from = percentile_group,
+                values_from = c(min,max)) |> 
+    mutate(
+      # make ranges non-overlapping
+      min_Low = if_else(min_Low == max_VeryLow, min_Low + .1, min_Low),
+      min_SomewhatLow = if_else(min_SomewhatLow == max_Low, min_SomewhatLow + .1, min_SomewhatLow),
+      min_SomewhatLow = if_else(min_SomewhatLow == max_Low, min_SomewhatLow + .1, min_SomewhatLow),
+      min_Average = if_else(min_Average == max_SomewhatLow, min_Average + .1, min_Average),
+      min_SomewhatHigh = if_else(min_SomewhatHigh == max_Average, min_SomewhatHigh + .1, min_SomewhatHigh),
+      min_High = if_else(min_High == max_SomewhatHigh, min_High + .1, min_High),
+      min_VeryHigh = if_else(min_VeryHigh == max_High, min_VeryHigh + .1, min_VeryHigh),
+      "Very low" = glue("≤{sprintf('%.1f', max_VeryLow)}"),
+      "Low" = glue("{sprintf('%.1f', min_Low)}-{sprintf('%.1f', max_Low)}"),
+      "Somewhat low" = glue("{sprintf('%.1f', min_SomewhatLow)}-{sprintf('%.1f', max_SomewhatLow)}"),
+      "Average" = glue("{sprintf('%.1f', min_Average)}-{sprintf('%.1f', max_Average)}"),
+      "Somewhat high" = glue("{sprintf('%.1f', min_SomewhatHigh)}-{sprintf('%.1f', max_SomewhatHigh)}"),
+      "High" = glue("{sprintf('%.1f', min_High)}-{sprintf('%.1f', max_High)}"),
+      "Very high" = glue("≥{sprintf('%.1f', min_VeryHigh)}"),
+      Sex = Gender
+    ) |> 
+    select(
+      Sex,
+      agegroup_5,
+      n,
+      "Very low", 
+      "Low",
+      "Somewhat low", 
+      Average ,
+      "Somewhat high",
+      "High" ,
+      "Very high"
+    ) |> 
     filter(
-      Age != "NA yrs",
-      Gender != "Other"
-    )
+      Sex != "Other"
+    )  |>  mutate(
+      agegroup_5 = str_remove(agegroup_5, " yrs"),
+      Sex = case_when(
+        Sex == "Female" ~ "Women",
+        Sex == "Male" ~ "Men",
+        TRUE ~ Sex
+      )) 
 }
+
+
+
+
+
+
 
 
  make_reference_table <- function(df) {
@@ -329,20 +601,20 @@ make_reference_table(df=eb)
 ## L/min
 
 ```{r}
-eLmin <-
-dfc %>%  
-   filter(
-     DiagHighBloodPressure == "N", 
-          HeartMedicine == "N", 
-          PulseMedicine == "N", 
-          TobaccoSmoking > 4, 
-          Gender != "Other"
-          ) |> 
-   calculate_percentiles_in_table(variable = EkB_MaxVO2)
-  
-
-
-eLmin |> make_reference_table()
+# eLmin <-
+# dfc %>%  
+#    filter(
+#      DiagHighBloodPressure == "N", 
+#           HeartMedicine == "N", 
+#           PulseMedicine == "N", 
+#           TobaccoSmoking > 4, 
+#           Gender != "Other"
+#           ) |> 
+#    calculate_percentiles_in_table(variable = EkB_MaxVO2)
+#   
+# 
+# 
+# eLmin |> make_reference_table()
 ```
 
 ### smokers, but those using blood or pulse pressure medicine or diagnosed with high blood pressure are removed -
@@ -351,7 +623,7 @@ eLmin |> make_reference_table()
 
 ```{r}
 
-eb2 <-
+eb_smokers <-
 dfc %>%  
    filter(
      DiagHighBloodPressure == "N", 
@@ -363,27 +635,27 @@ dfc %>%
    calculate_percentiles_in_table(variable = EkB_rel_VO2)
 
 
-eb2 |> make_reference_table()
+eb_smokers |> make_reference_table()
 
 ```
 
 ## L/min
 
 ```{r}
-elmin2 <-
-dfc %>%  
-   filter(
-     DiagHighBloodPressure == "N", 
-          HeartMedicine == "N", 
-          PulseMedicine == "N", 
-          TobaccoSmoking <= 4, 
-          Gender != "Other"
-          ) |> 
-     calculate_percentiles_in_table(variable = EkB_MaxVO2)
-
-
-
-elmin2 |> make_reference_table()
+# elmin2 <-
+# dfc %>%  
+#    filter(
+#      DiagHighBloodPressure == "N", 
+#           HeartMedicine == "N", 
+#           PulseMedicine == "N", 
+#           TobaccoSmoking <= 4, 
+#           Gender != "Other"
+#           ) |> 
+#      calculate_percentiles_in_table(variable = EkB_MaxVO2)
+# 
+# 
+# 
+# elmin2 |> make_reference_table()
 
 ```
 
@@ -392,7 +664,7 @@ elmin2 |> make_reference_table()
 ### ml
 
 ```{r}
-ebb <-
+eb_bloodmeds <-
 dfc %>%  
    filter(
      DiagHighBloodPressure == "Y" | 
@@ -405,7 +677,7 @@ dfc %>%
 
 
 
-ebb |> make_reference_table()
+eb_bloodmeds |> make_reference_table()
 ```
 
 # Astrand reference Table
@@ -416,7 +688,7 @@ ebb |> make_reference_table()
 
 ```{r}
 
-A <-
+Astrand <-
 dfc %>%  
    filter(
      DiagHighBloodPressure == "N", 
@@ -428,7 +700,7 @@ dfc %>%
   calculate_percentiles_in_table(variable = Astrand_rel_VO2)
 
 
-A |> make_reference_table()
+Astrand |> make_reference_table()
 
 
 ```
@@ -436,19 +708,19 @@ A |> make_reference_table()
 ### L/min
 
 ```{r}
-A2 <-
-dfc %>%  
-   filter(
-     DiagHighBloodPressure == "N", 
-          HeartMedicine == "N", 
-          PulseMedicine == "N", 
-          TobaccoSmoking > 4, 
-          Gender != "Other"
-          ) |> 
-  calculate_percentiles_in_table(variable = Astrand_MaxVO2)
-
-
-A2 |> make_reference_table()
+# A2 <-
+# dfc %>%  
+#    filter(
+#      DiagHighBloodPressure == "N", 
+#           HeartMedicine == "N", 
+#           PulseMedicine == "N", 
+#           TobaccoSmoking > 4, 
+#           Gender != "Other"
+#           ) |> 
+#   calculate_percentiles_in_table(variable = Astrand_MaxVO2)
+# 
+# 
+# A2 |> make_reference_table()
 ```
 
 ### smokers but not any using blood or pulse pressure medicine or diagnosed with high blood pressure
@@ -457,7 +729,7 @@ A2 |> make_reference_table()
 
 ```{r}
 
-A3 <-
+Astrand_smokers <-
 dfc %>%  
    filter(
      DiagHighBloodPressure == "N" , 
@@ -469,7 +741,7 @@ dfc %>%
   calculate_percentiles_in_table(variable = Astrand_rel_VO2)
 
 
-A3 |> 
+Astrand_smokers |> 
   make_reference_table()
 ```
 
@@ -477,21 +749,21 @@ A3 |>
 
 ```{r}
 
-A4 <-
-dfc %>%  
-   filter( 
-     DiagHighBloodPressure == "N", 
-          HeartMedicine == "N", 
-          PulseMedicine == "N", 
-          TobaccoSmoking <= 4, 
-          Gender != "Other"
-          ) |> 
-  calculate_percentiles_in_table(variable = Astrand_MaxVO2)
-
-
-
-A4 |> 
-  make_reference_table()
+# A4 <-
+# dfc %>%  
+#    filter( 
+#      DiagHighBloodPressure == "N", 
+#           HeartMedicine == "N", 
+#           PulseMedicine == "N", 
+#           TobaccoSmoking <= 4, 
+#           Gender != "Other"
+#           ) |> 
+#   calculate_percentiles_in_table(variable = Astrand_MaxVO2)
+# 
+# 
+# 
+# A4 |> 
+#   make_reference_table()
 ```
 
 ### those with high bloodpressure or using blood or pulse medicin but not smoking
@@ -499,7 +771,7 @@ A4 |>
 ### ml
 
 ```{r}
-Ab <-
+Astrand_bloodmeds <-
 dfc %>%  
    filter(
      DiagHighBloodPressure == "Y" | 
@@ -512,7 +784,7 @@ dfc %>%
 
 
 
-Ab |> 
+Astrand_bloodmeds |> 
   make_reference_table()
 
 ```
@@ -521,114 +793,186 @@ Ab |>
 
 functions
 
-mean = quantile({{ variable }}, c(.1, .25, .50, .75, .9)),
-
-percentile = c(.1, .25, .50, .75, .9)
-
 ```{r}
+
+
 plot_smooth_data <- function(df, variable, xlim = NULL, ylim = NULL, title = NULL) {
   smooth_data <- df %>%
+        mutate(
+    Gender = case_when(
+    Gender == "Female" ~ "Women",
+    Gender == "Male" ~ "Men",
+    TRUE ~ Gender
+  )) |> 
     filter(DiagHighBloodPressure == "N",
            HeartMedicine == "N",
            PulseMedicine == "N",
            TobaccoSmoking == 5,
            Age >= 20,
-           Age <= 65,
+           Age <= 75,
            Gender != "Other") %>%
     group_by(Gender, Age) %>%
     mutate(
-      percentile = ntile({{ variable }}, 3)
-      ) %>%
+    percentile100 = ntile({{ variable }}, 100),
+    percentile_group = case_when(
+      percentile100 <= 10 ~ "0-10-",
+      percentile100 <= 25 ~ "11-25-",
+      percentile100 <= 40 ~ "26-40-",
+      percentile100 <= 60 ~ "41-60-",
+      percentile100 <= 75 ~ "61-75-",
+      percentile100 <= 90 ~ "76-90-",
+      TRUE ~ "91-100-"
+    ))  %>%
     ungroup() %>%
-    drop_na(percentile, Gender, Age)
+    drop_na(percentile100, Gender, Age)
+  
+
 
   text_data <- smooth_data %>%
     filter(Age == 20) %>%
-    group_by(Gender, percentile) %>%
-    summarise(max_age = max(Age),
-              min_age = min(Age),
-              minvo2 = mean({{ variable }})) %>%
-    ungroup()
-
-  ggplot(smooth_data, aes(Age, {{ variable }}, group = percentile, color = as.character(percentile))) +
-    geom_point(alpha = 0.1, shape = 21) +
-    geom_smooth(aes(group = percentile),
-                color = "gray30",
-                se = TRUE,
-                fullrange = FALSE,
-                span = 0.9) +
-    geom_text(data = text_data,
-              aes(x = 13, y = minvo2,
-                  label = paste0(percentile * 25, "%")),
-              color = "black",
-              hjust = 0,
-              show.legend = FALSE) +
-    facet_wrap(~ Gender) +
-    #scale_color_viridis_d(option = "rocket") +
-    scale_color_manual(values = c("#291535", "#2f6b8e", "#291535")) +
-    theme_minimal(
-        base_size = 14,
-  base_family = "Roboto",
-    ) +
-    scale_x_continuous(expand = c(0,0), limits = xlim) +
-    ylim(ylim) +
-     labs(title = {{title}}) +
-    theme(legend.position = "none")
-}
-
-
-
-
-
-plot_smooth_data <- function(df, variable, xlim = NULL, ylim = NULL, title = NULL) {
-  smooth_data <- df %>%
-    filter(DiagHighBloodPressure == "N",
-           HeartMedicine == "N",
-           PulseMedicine == "N",
-           TobaccoSmoking == 5,
-           Age >= 20,
-           Age <= 65,
-           Gender != "Other") %>%
-    group_by(Gender, Age) %>%
-    mutate(
-      percentile = cut({{ variable }}, quantile({{ variable }}, c(0, 0.1, 0.25, 0.5, 0.75, 0.9, 1), na.rm = TRUE), include.lowest = TRUE, labels = FALSE),
-      label_percentile = cut({{ variable }}, quantile({{ variable }}, c(0, 0.1, 0.25, 0.5, 0.75, 0.9, 1), na.rm = TRUE), include.lowest = TRUE, labels = c("10%", "25%", "50%", "75%", "90%"))
-    ) %>%
-    ungroup() %>%
-    drop_na(percentile, Gender, Age)
-
-  text_data <- smooth_data %>%
-    filter(Age == 20) %>%
-    group_by(Gender, percentile) %>%
+    group_by(Gender, percentile_group) %>%
     summarise(max_age = max(Age),
               min_age = min(Age),
               minvo2 = mean({{ variable }}),
-              label_percentile = first(label_percentile)) %>%
-    ungroup()
+              label_percentile = first(percentile_group)) %>%
+    ungroup() 
+  
+  
 
-  ggplot(smooth_data, aes(Age, {{ variable }}, group = percentile, color = as.character(percentile))) +
-    geom_point(alpha = 0.1, shape = 21) +
-    geom_smooth(aes(group = percentile),
-                color = "gray30",
-                se = TRUE,
-                fullrange = FALSE,
-                span = 0.9) +
-    geom_text(data = text_data,
-              aes(x = 13, y = minvo2,
+
+  ggplot(smooth_data, aes(Age, {{ variable }}, group = percentile_group, color = as.character(percentile_group))) +
+    geom_point(alpha = 0.06, shape = 16) +
+    # geom_smooth(aes(group = percentile_group),
+    #             color = "gray35",
+    #             se = TRUE,
+    #             fullrange = FALSE,
+    #             span = 0.9) +
+    geom_text(data = text_data %>% filter(Gender == unique(Gender)[1]), # Filter based on the first facet
+              aes(x = 19, y = minvo2,
                   label = label_percentile),
-              color = "black",
-              hjust = 0,
+              color = "grey30",
+              fontface = "bold", 
+              size = 3.2,
+              hjust = 1,
               show.legend = FALSE) +
-    facet_wrap(~ Gender) +
-    scale_color_manual(values = c("#291535", "#2f6b8e", "#291535", "#2f6b8e", "#291535", "#2f6b8e", "#291535")) +
+    facet_wrap(~ Gender) + #reorder(Gender, desc(Gender))
+    scale_color_manual(values = c("#2C3333", "#395B64", "#A5C9CA", "#E7F6F2", "#A5C9CA", "#395B64", "#2C3333")) +
     theme_minimal(base_size = 14, base_family = "Roboto") +
     scale_x_continuous(expand = c(0, 0), limits = xlim) +
     ylim(ylim) +
-    labs(title = title) +
-    theme(legend.position = "none")
+    labs(title = title, y = "", x = "") +
+    theme(
+      legend.position = "none",
+      panel.grid.minor = element_blank())
 }
 
 
+
+
+
+
+plot_smooth_data <- function(df, variable1, variable2, xlim = NULL, ylim = NULL, title = NULL) {
+  smooth_data <- 
+    bind_cols(
+    df %>%
+        mutate(
+    Gender = case_when(
+    Gender == "Female" ~ "Women",
+    Gender == "Male" ~ "Men",
+    TRUE ~ Gender
+  )) |> 
+    filter(DiagHighBloodPressure == "N",
+           HeartMedicine == "N",
+           PulseMedicine == "N",
+           TobaccoSmoking == 5,
+           Age >= 20,
+           Age <= 75,
+           Gender != "Other") %>%
+    group_by(Gender, Age) %>%
+    mutate(
+    percentile100 = ntile({{ variable1 }}, 100),
+    percentile_group = case_when(
+      percentile100 <= 10 ~ "0-10-",
+      percentile100 <= 25 ~ "11-25-",
+      percentile100 <= 40 ~ "26-40-",
+      percentile100 <= 60 ~ "41-60-",
+      percentile100 <= 75 ~ "61-75-",
+      percentile100 <= 90 ~ "76-90-",
+      TRUE ~ "91-100-"
+    ))  %>%
+    ungroup() %>%
+    drop_na(percentile100, Gender, Age) |> 
+    mutate(test="EB"),
+  
+df %>%
+        mutate(
+    Gender = case_when(
+    Gender == "Female" ~ "Women",
+    Gender == "Male" ~ "Men",
+    TRUE ~ Gender
+  )) |> 
+    filter(DiagHighBloodPressure == "N",
+           HeartMedicine == "N",
+           PulseMedicine == "N",
+           TobaccoSmoking == 5,
+           Age >= 20,
+           Age <= 75,
+           Gender != "Other") %>%
+    group_by(Gender, Age) %>%
+    mutate(
+    percentile100 = ntile({{ variable2 }}, 100),
+    percentile_group = case_when(
+      percentile100 <= 10 ~ "0-10-",
+      percentile100 <= 25 ~ "11-25-",
+      percentile100 <= 40 ~ "26-40-",
+      percentile100 <= 60 ~ "41-60-",
+      percentile100 <= 75 ~ "61-75-",
+      percentile100 <= 90 ~ "76-90-",
+      TRUE ~ "91-100-"
+    ))  %>%
+    ungroup() %>%
+    drop_na(percentile100, Gender, Age) |> 
+
+    mutate(test="EB")
+)
+
+  text_data <- smooth_data %>%
+    filter(Age == 20) %>%
+    group_by(Gender, percentile_group) %>%
+    summarise(max_age = max(Age),
+              min_age = min(Age),
+              minvo2 = mean({{ variable1 }}),
+              label_percentile = first(percentile_group)) %>%
+    ungroup() 
+  
+  
+
+
+  ggplot(smooth_data, aes(Age, {{ variable }}, group = percentile_group, color = as.character(percentile_group))) +
+    geom_point(alpha = 0.06, shape = 16) +
+    # geom_smooth(aes(group = percentile_group),
+    #             color = "gray35",
+    #             se = TRUE,
+    #             fullrange = FALSE,
+    #             span = 0.9) +
+    geom_text(data = text_data %>% filter(Gender == unique(Gender)[1]), # Filter based on the first facet
+              aes(x = 19, y = minvo2,
+                  label = label_percentile),
+              color = "grey30",
+              fontface = "bold", 
+              size = 3.2,
+              hjust = 1,
+              show.legend = FALSE) +
+    facet_wrap(~ Gender+test) + #reorder(Gender, desc(Gender))
+    scale_color_manual(values = c("#2C3333", "#395B64", "#A5C9CA", "#E7F6F2", "#A5C9CA", "#395B64", "#2C3333")) +
+    theme_minimal(base_size = 14, base_family = "Roboto") +
+    scale_x_continuous(expand = c(0, 0), limits = xlim) +
+    ylim(ylim) +
+    labs(title = title, y = "", x = "") +
+    theme(
+      legend.position = "none",
+      panel.grid.minor = element_blank())
+}
 
 ```
 
@@ -636,236 +980,65 @@ plot_smooth_data <- function(df, variable, xlim = NULL, ylim = NULL, title = NUL
 
 ```{r}
 
-plot_smooth_data(dfc, EkB_rel_VO2, xlim = c(10, 65), ylim = c(10,80), title = "EB mL")
+
+
+eb_mL <- plot_smooth_data(dfc, EkB_rel_VO2, Astrand_rel_VO2, xlim = c(10, 75), ylim = c(10,80), title = "EB mL")
+
+
+eb_mL <- plot_smooth_data(dfc, EkB_rel_VO2, xlim = c(10, 75), ylim = c(10,80), title = "EB mL")
   
 ```
 
 ```{r}
 
-plot_smooth_data(dfc, EkB_MaxVO2, xlim = c(10, 65), ylim = c(0.5, 7), title = "EB L")
+plot_smooth_data(dfc, EkB_MaxVO2, xlim = c(10, 75), ylim = c(0.5, 7), title = "EB L")
 ```
 
 ```{r}
 
-plot_smooth_data(dfc, Astrand_rel_VO2, xlim = c(10, 65), ylim = c(10,90), title = "Åstrand mL")
-
-
-```
-
-```{r}
-
-plot_smooth_data(dfc, Astrand_MaxVO2, xlim = c(10, 65), ylim = c(0.5, 7), title = "Åstrand L")
-
-
-```
-
-```{r}
-  # smothed lines from raw data
-# dfc %>%  
-#   filter(DiagHighBloodPressure == "N", 
-#          HeartMedicine == "N", 
-#          PulseMedicine == "N", 
-#          TobaccoSmoking == 5, 
-#          Age >= 20,
-#          Gender != "Other") |> 
-#   drop_na(EkB_rel_VO2, agegroup_6) %>% 
-#   group_by(Gender, Age) %>% 
-#   mutate(percentile = ntile(EkB_rel_VO2, 10)) |> 
-#   ungroup() |> 
-#   drop_na(percentile, Gender, Age) |> 
-#   ggplot(aes(Age, EkB_rel_VO2,  group = percentile, color = as.character(percentile))) +
-#   
-#    #geom_bin2d( aes(fill =  as.character(percentile)), alpha = 0.5) +
-#   geom_text(aes(label = paste0(percentile, "%")), vjust = -1.5, color = "black") +  # Add the percentile labels
-#  # geom_contour_filled( aes(fill =  as.character(percentile))) +
-#    # geom_point(alpha=0.01) +
-#  # geom_tile(
-#  # interpolate = TRUE,
-#  #  alpha = 0.02,
-#  #   aes(fill =  as.character(percentile))) +
-#   #  geom_line( aes(group = percentile), se = FALSE) +
-#   geom_smooth(
-#     aes(group = percentile),
-#     se = TRUE,
-#     fullrange = FALSE,
-#     span = 0.9
-#   ) +
-#   facet_wrap(~Gender) +
-#  # scale_y_continuous(limits = c(10,70)) +
-#   theme_minimal() +
-#   labs(title = "EB")
-# 
-# # per agegroup
-# dfc %>%  
-#   filter(DiagHighBloodPressure == "N", 
-#          HeartMedicine == "N", 
-#          PulseMedicine == "N", 
-#          TobaccoSmoking == 5, 
-#          Gender != "Other") |> 
-#   drop_na(EkB_rel_VO2, agegroup_6) %>% 
-#   group_by(Gender, agegroup_6) %>% 
-#   reframe(
-#     mean = quantile(EkB_rel_VO2, c(.1,.25,.40,.50,.60,.75,.9)), 
-#     percentile = c(.1,.25,.40,.50,.60,.75,.9),
-#     n=n()
-#   ) %>% 
-#   #  ungroup() %>% 
-#   mutate(
-#     mean = round(mean,1),
-#     percentile = percentile*100
-#   ) |> 
-#   ggplot(aes(agegroup_6,mean,  group = percentile, color = as.character(percentile))) +
-#   geom_point(alpha=0.8)+
-#   geom_line( aes(group = percentile), se = FALSE) +
-#   facet_wrap(~Gender) +
-#   
-#   scale_y_continuous(limits = c(20,65)) +
-#   theme_minimal() +
-#   labs(title = "EB")
+astrand_mL <- plot_smooth_data(dfc, Astrand_rel_VO2, xlim = c(10, 75), ylim = c(10,90), title = "Åstrand mL")
 
 
 ```
 
 ```{r}
 
+plot_smooth_data(dfc, Astrand_MaxVO2, xlim = c(10, 75), ylim = c(0.5, 7), title = "Åstrand L")
 
 
-# 
-# dfc %>%  
-#   filter(DiagHighBloodPressure == "N", 
-#          HeartMedicine == "N", 
-#          PulseMedicine == "N", 
-#          TobaccoSmoking == 5, 
-#          Gender != "Other") |> 
-#   drop_na(Astrand_rel_VO2, agegroup_6) %>% 
-#   group_by(Gender, agegroup_6) %>% 
-#   reframe(
-#     mean = quantile(Astrand_rel_VO2, c(.1,.25,.40,.50,.60,.75,.9)), 
-#     percentile = c(.1,.25,.40,.50,.60,.75,.9),
-#     n=n()
-#   ) %>% 
-#   #  ungroup() %>% 
-#   mutate(
-#     mean = round(mean,1),
-#     percentile = percentile*100
-#   ) |> 
-#   ggplot(aes(agegroup_6,mean,  group = percentile, color = as.character(percentile))) +
-#   geom_point(alpha=0.8)+
-#   geom_line( aes(group = percentile), se = FALSE) +
-#   facet_wrap(~Gender) +
-#   
-#   scale_y_continuous(limits = c(20,65)) +
-#     theme_minimal() +
-#   labs(title = "Åstrand")
-# 
-# # mean for each Age (year) and decile
-# 
-# dfc %>%  
-#   filter(DiagHighBloodPressure == "N", 
-#          HeartMedicine == "N", 
-#          PulseMedicine == "N", 
-#          TobaccoSmoking == 5, 
-#          Gender != "Other") |> 
-#   drop_na(Astrand_rel_VO2, agegroup_6) %>% 
-#   group_by(Gender, Age) %>% 
-#   mutate(percentile = ntile(Astrand_rel_VO2, 10)) |> 
-#   group_by(Gender, Age,percentile) %>%  
-#   summarize(mean_Astrand_rel_VO2 = mean(Astrand_rel_VO2))|> 
-#       ggplot(aes(Age, mean_Astrand_rel_VO2,  group = percentile, color = as.character(percentile))) +
-#  # geom_point(alpha=0.8) +
-#   #  geom_line( aes(group = percentile), se = FALSE) +
-#     geom_smooth( aes(group = percentile), se = FALSE) +
-#   facet_wrap(~Gender) +
-#   
-#   scale_y_continuous(limits = c(10,70)) +
-#     theme_minimal() +
-#   labs(title = "Åstrand")
-#   
-#   
-#   # smothed lines from raw data
-# 
-# dfc %>%  
-#   filter(DiagHighBloodPressure == "N", 
-#          HeartMedicine == "N", 
-#          PulseMedicine == "N", 
-#          TobaccoSmoking == 5, 
-#          Age >= 20,
-#          Gender != "Other") |> 
-#   drop_na(Astrand_rel_VO2, agegroup_6) %>% 
-#   group_by(Gender, Age) %>% 
-#   mutate(percentile = ntile(Astrand_rel_VO2, 10)) |> 
-#   ungroup() |> 
-#   drop_na(percentile, Gender, Age) |> 
-#   ggplot(aes(Age, Astrand_rel_VO2,  group = percentile, color = as.character(percentile))) +
-#   # geom_point(alpha=0.01) +
-#   geom_tile(
-#    interpolate = TRUE, 
-#    alpha = 0.02,
-#     aes(fill =  as.character(percentile))) +
-#   #  geom_line( aes(group = percentile), se = FALSE) +
-#   geom_smooth( 
-#     aes(group = percentile), 
-#     se = TRUE,
-#     fullrange = FALSE,
-#     span = 0.9,
-#    # method = "loess"
-#   ) +
-#   facet_wrap(~Gender) +
-#   scale_y_continuous(limits = c(10,70)) +
-#   theme_minimal() +
-#   labs(title = "Åstrand")
-# 
-# 
-# 
-# 
-# 
-# 
-# 
-#   
-#   reframe(
-#     mean = quantile(Astrand_rel_VO2, c(.1,.25,.40,.50,.60,.75,.9)), 
-#     percentile = c(.1,.25,.40,.50,.60,.75,.9),
-#     n=n()
-#   ) %>% 
-#   #  ungroup() %>% 
-#   mutate(
-#     mean = round(mean,1),
-#     percentile = percentile*100
-#   ) |> 
-#   ggplot(aes(agegroup_6,mean,  group = percentile, color = as.character(percentile))) +
-#  # geom_point(alpha=0.8)+
-#   geom_line( aes(group = percentile), se = FALSE) +
-#   facet_wrap(~Gender) +
-#   
-#   scale_y_continuous(limits = c(20,65)) +
-#     theme_minimal() +
-#   labs(title = "Åstrand")
-# 
-# 
-# dfc %>%  
-#   filter(DiagHighBloodPressure == "N", 
-#          HeartMedicine == "N", 
-#          PulseMedicine == "N", 
-#          TobaccoSmoking == 5, 
-#          Gender != "Other") |> 
-#   drop_na(Astrand_rel_VO2, agegroup_6) %>% 
-#   group_by(Gender, agegroup_6) %>% 
-#   reframe(
-#     mean = quantile(Astrand_rel_VO2, c(.1,.25,.40,.50,.60,.75,.9)), 
-#     percentile = c(.1,.25,.40,.50,.60,.75,.9),
-#     n=n()
-#   ) %>% 
-#   #  ungroup() %>% 
-#   mutate(
-#     mean = round(mean,1),
-#     percentile = percentile*100
-#   ) |> 
-#   ggplot(aes(agegroup_6,mean,  group = percentile, color = as.character(percentile))) +
-#   geom_point(alpha=0.8)+
-#   geom_line( aes(group = percentile), se = FALSE) +
-#   facet_wrap(~Gender) +
-#   
-#   scale_y_continuous(limits = c(20,65)) +
-#     theme_minimal() +
-#   labs(title = "Åstrand")
+```
+
+# function for saving data in different sheets in an excel workbook
+
+```{r}
+
+library(openxlsx)
+
+createExcelWorkbook <- function(data_list, sheet_names, workbook_name) {
+  # Create a new Excel workbook
+  wb <- createWorkbook()
+
+  # Iterate over the datasets and sheet names
+  for (i in 1:length(data_list)) {
+    data <- data_list[[i]]
+    sheet_name <- sheet_names[i]
+    
+    # Add the data to a new sheet
+    addWorksheet(wb, sheetName = sheet_name)
+    writeData(wb, sheet = sheet_name, x = data)
+  }
+
+  # Save the Excel workbook
+  saveWorkbook(wb, file = workbook_name, overwrite = TRUE)
+}
+
+# Example usage
+data_list <- list(table1, merged_df, eb, eb_smokers, eb_bloodmeds, Astrand, Astrand_smokers, Astrand_bloodmeds)
+sheet_names <- c("table1", "hunt", "eb", "eb_smokers", "eb_bloodmeds", "Astrand", "Astrand_smokers", "Astrand_bloodmeds")
+workbook_name <- "eb_and_astrand_ref_values_tables_20230624.xlsx"
+
+createExcelWorkbook(data_list, sheet_names, workbook_name)
+
+glimpse(table1)
+
 ```

@@ -1,5 +1,5 @@
 ---
-title: "reference values EB åstrand"
+title: "Reference values EB åstrand"
 format:
   html:
     embed-resources: true
@@ -10,6 +10,10 @@ execute:
 editor: source
 ---
 
+
+
+# Libraries
+
 ```{r}
 library(tidyverse)
 library(glue)
@@ -18,6 +22,7 @@ library(ggtext)
 library(ggridges)
 
 ```
+# Data
 
 ```{r}
 
@@ -39,6 +44,7 @@ df <- read_csv2(here::here("data", "2014-2022.csv"))
 
 Q groups 0-10 11-25 26-40 41-60 61-75 76-90 91-100 color gradients: https://colorhunt.co/palettes/gradient
 
+# ------------------------
 # Clean data
 
 ```{r}
@@ -166,7 +172,7 @@ dfc <- dfc |> filter(id != 24939)
 #write_csv(dfc, here::here("fitness reference values ekblom and astrand", "data", "2014-2022_clean.csv"))
 ```
 
-# 
+# _______________________________________
 
 # -descriptives for method
 
@@ -508,7 +514,7 @@ percent_diff_mL_men = ( meanL_Female -meanL_Male) /meanL_Male * 100)
 
 ```
 
-# 
+# ----------------------
 
 # -descriptive table
 
@@ -618,6 +624,7 @@ edvardsen <- bind_rows(
 
 ```
 
+# ------------------------
 ## HUNT study data
 
 ```{r}
@@ -1127,9 +1134,9 @@ ggsave(width = 8, height = 8, dpi = 600, "referenceridges.svg")
 
 ```
 
-# 
+# -------------------------------
 
-# -EB Astrand reference Table
+# -Reference Table EB Astrand 
 
 ### Functions
 
@@ -1215,9 +1222,6 @@ calculate_percentiles_in_table <-
         TRUE ~ Sex
       )) 
 }
-
-
-
 
 
 
@@ -1764,7 +1768,7 @@ ggsave("refplot_L_pink.png", width = 11, height = 8, dpi=600)
 
 ```
 
-# 
+# -----------------------------------
 
 # -Equations
 
@@ -1815,7 +1819,7 @@ $$ $$
 \operatorname{\widehat{EkB\_rel\_VO2}} = 64.92 + 13.75(\operatorname{Gender}_{\operatorname{Male}}) - 0.21(\operatorname{Age}) + 0.24(\operatorname{TobaccoSmoking}) + 1.6(\operatorname{ExerciseAnswer}) - 1.06(\operatorname{BMI}) - 0.12(\operatorname{Gender}_{\operatorname{Male}} \times \operatorname{Age})
 $$
 
-# 
+# -------------------------
 
 # -Function for saving data in different sheets in an excel workbook
 
@@ -1852,12 +1856,13 @@ glimpse(table1)
 
 ```
 
-# Exercise vs relative vo2 plot
+# ---------------------------------
 
+# -Exercise 
+
+## means plot
 ```{r}
 
-
-# means 
 dfc |> 
   group_by(ExerciseAnswer, Gender, AgeGroup) |> 
   summarise(meanEB = mean(EkB_rel_VO2, na.rm = TRUE),
@@ -1872,10 +1877,11 @@ dfc |>
   geom_point() +
   geom_line(aes(group = as.character(ExerciseAnswer) )) +
   facet_wrap(~ Gender + test)
+```
 
+## Long data frame, exercise
 
-
-# create long data frame
+```{r}
 dfc_long <- 
   dfc |> 
   filter(Age >= 20 , Age <= 70) |> 
@@ -1915,16 +1921,37 @@ dfc_long <-
     ))
   ) |> 
   drop_na(vo2, Age, ExerciseAnswer) 
+```
+## R2 for graphs
 
+```{r}
 
-# model values R2 lm between vo2 and exercise answer when adjusted for Age
+# model values R2 lm between vo2 and exercise answer
 exercise <-
 dfc_long %>%
   group_by(test, Gender) %>%
-  group_modify(~ broom::glance(lm(vo2 ~ ExerciseAnswer + Age, data = .x))) |> 
-  mutate(AgeGroup="50-59 years")
+  group_modify(~ broom::glance(lm(vo2 ~ ExerciseAnswer + Age, data = .x))) 
 
-# graph with lm
+```
+
+## R2 for exercise and vo2 by agegroup
+
+```{r}
+
+dfc_long %>%
+  group_by(test, Gender, AgeGroup) %>%
+  group_modify(~ broom::glance(lm(vo2 ~ ExerciseAnswer, data = .x))) |> 
+  select(test, Gender, AgeGroup, r.squared, adj.r.squared ) |> 
+   arrange(desc(r.squared)) |>
+  drop_na(AgeGroup) |> 
+  print(n=50)
+
+print(exercise, n=30)
+```
+
+## Graphs
+```{r}
+# Graph with lm
 dfc_long |> 
     filter(AgeGroup!="+70 years") |> 
   ggplot(aes(ExerciseAnswer, vo2, group = AgeGroup, color = AgeGroup )) +
@@ -2024,52 +2051,11 @@ ggdist::stat_interval(.width = c(.25, .5, .95), size = 4,  # c(.25, .5, .95, 1)
 
 
 
-
-
-
-
-dfc_long |> 
-  ggplot(aes(Age, vo2, group = ExerciseAnswer, color =ExerciseAnswer )) +
-  geom_smooth(method = lm, se = FALSE) +
-  facet_wrap(~ Gender + test)
-
-
-
-
-
-# geom_smooth model values
-
-dfc_long %>%
-  group_by(test, Gender) %>%
-  group_map(~ summary(mgcv::gam(vo2 ~ s(Age, bs = "cs"), data = .x))) %>%
-  map_dbl(~ xxx)
-
-
-dfc_long %>% nest(-c(test, Gender)) %>% 
-  mutate(fit = map(data, ~mgcv::gam(vo2 ~ s(Age, bs = "cs"), data = .)),
-         results = map(fit, broom::glance),
-         R.square = map_dbl(fit, ~ summary(.)$r.sq)) %>%
-  unnest(results) %>%
-  select(-data, -fit) 
-
-
-
-
-
-# graph with smooth
-dfc_long |> 
-  ggplot(aes(Age, vo2, group = as.character(ExerciseAnswer), color = as.character(ExerciseAnswer) )) +
-  geom_smooth(method = NULL, se = FALSE) +
-  facet_wrap(~ Gender + test) + 
-  theme_minimal()
-
-
-
-
-
 ```
-# ____________________
-# Simple boxplotvo2 vs exercise 
+
+
+
+# Boxplot exercise vs vo2 
 
 https://colorhunt.co/palettes/popular
 
@@ -2117,22 +2103,12 @@ ggsave(width = 9, height = 6, dpi = 600, "vo2vsexercise.svg")
 
 
 ```
-# R2 for exercise and vo2 by agegroup
 
-```{r}
-
-dfc_long %>%
-  group_by(test, Gender, AgeGroup) %>%
-  group_modify(~ broom::glance(lm(vo2 ~ ExerciseAnswer, data = .x))) |> 
-  select(test, Gender, AgeGroup, r.squared, adj.r.squared ) |> 
-   arrange(desc(r.squared)) |>
-  drop_na(AgeGroup) |> 
-  print(n=50)
-
-print(exercise, n=30)
-```
 # ____________________
-# -BMI long df
+# -BMI 
+
+
+## long df
 
 ```{r}
 dfc_long_BMI <- 
@@ -2170,11 +2146,10 @@ dfc |>
       "60-69"
     ))
   )
+
 ```
 
-
-
-# R2 for BMI and vo2 by agegroup
+## R2 for BMI and vo2 by agegroup
 ```{r}
 # model data
 BMI <- 
@@ -2200,36 +2175,9 @@ dfc_long_BMI %>%
 ```
 
   
-# BMI plot
+## BMI plot
 
 ```{r}
-
-dfc %>%
-    mutate(BMI_Group = case_when(
-    BMI < 18.5 ~ "Underweight",
-    BMI >= 18.5 & BMI < 25 ~ "Normal weight",
-    BMI >= 25 & BMI < 30 ~ "Overweight",
-    BMI >= 30 ~ "Obese",
-    TRUE ~ NA_character_
-  ))|> 
-  group_by(Gender, AgeGroup, BMI_Group) %>%
-  summarise(meanEB = mean(EkB_rel_VO2, na.rm = TRUE),
-            meanA = mean(Astrand_rel_VO2, na.rm = TRUE)) %>%
-  drop_na() |> 
-  filter(AgeGroup!="+70 years")|> 
-  pivot_longer(cols = c(meanEB, meanA),
-               names_to = "test",
-               values_to = "mean") |> 
-  ggplot(aes(AgeGroup, mean, color = BMI_Group)) +
-  geom_point() +
-  geom_line(aes(group = BMI_Group )) +
-  facet_wrap(~ Gender + test)
-
-
-
-
-
-
 
 
 

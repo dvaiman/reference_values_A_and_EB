@@ -20,6 +20,7 @@ library(glue)
 library(gt)
 library(ggtext)
 library(ggridges)
+library(dtrackr)
 
 ```
 # Data
@@ -41,6 +42,7 @@ df <- read_csv2(here::here("data", "2014-2022.csv"))
 -   comparison of HUNT, EB, and Åstrand values
 -   reference tables for, non-smokers, smokers, c) heart medicine, pulse medicin and diagHighBP.
 -   plots of percentiles of the eb test
+-   plots of Exercise and BMI
 
 Q groups 0-10 11-25 26-40 41-60 61-75 76-90 91-100 color gradients: https://colorhunt.co/palettes/gradient
 
@@ -173,7 +175,95 @@ dfc <- dfc |> filter(id != 24939)
 ```
 
 # _______________________________________
+# -Flow chart
 
+```{r}
+
+
+
+
+old = options(
+ #dtrackr.strata_glue="{.group}:{.value}",
+  #dtrackr.strata_sep="; ",
+  dtrackr.strata_glue="{tolower(.value)}",
+  dtrackr.strata_sep=", ",
+  dtrackr.default_message = "n={formatC(.count, big.mark = ',',format = 'fg')}",
+  #dtrackr.default_headline = "subgroup: {.strata}"
+)
+# reset options 
+#options(old)
+
+
+
+dfc |> 
+  track(.headline = "Flow chart: EB-test   ",
+        .messages=" Data from 2010-2022"
+        ) %>%
+ # status() %>%
+    group_by(Gender, 
+             .headline = "",
+             .messages="Stratify by sex\nn={formatC(.count, big.mark = ',')}"
+             
+             ) |>
+  status(.headline = "{Gender}") |> 
+#  ungroup() |> 
+    filter(EkB_rel_VO2 > 0, 
+           .messages=" {formatC(.excluded, big.mark = ',')} without the EB-test",
+           .headline="{Gender} excluded" )|>  # between(Age, 20,69)
+      
+    # group_by(Gender,
+    #          .messages="Stratify by sex\nn={formatC(.count, big.mark = ',')}",
+    #          .headline = "Excluded ") |>
+  comment(.headline = "") |> 
+
+  # does not deal with NA without na.rm true
+exclude_all(
+       # Gender == "Other" ~ "Exclude {.excluded} sex other" ,
+       Age < 20 | Age > 69 ~          "{formatC(.excluded, big.mark = ',',format = 'fg')} with age < 20 or age > 69" ,
+       DiagHighBloodPressure != "N" ~ "{formatC(.excluded, big.mark = ',',format = 'fg')} with High Blood Pressure",
+       HeartMedicine != "N" ~         "{formatC(.excluded, big.mark = ',',format = 'fg')} with Heart Medicine",
+       PulseMedicine != "N" ~         "{formatC(.excluded, big.mark = ',',format = 'fg')} with Pulse Medicine",
+       TobaccoSmoking < 5 ~           "{formatC(.excluded, big.mark = ',',format = 'fg')} Smokers", 
+       na.rm = TRUE,
+       .headline = "{Gender} excluded"
+  ) |>  comment(.headline = "\n{Gender} ", 
+                "n={formatC(.count, big.mark = ',')}") |> 
+  ungroup(.headline = "Final sample "#, .messages="n={.count}"
+          ) |> 
+  flowchart()
+
+
+dfc |> 
+  track(.headline = "Å-test flow chart ",
+       # .messages="n={.count}"
+        ) %>%
+ # status() %>%
+
+    filter(Astrand_rel_VO2 > 0, .messages="Excluded n={formatC(.excluded, big.mark = ',')} without the Å-test" )|>  # between(Age, 20,69)
+    #comment(.headline = "") |>  
+    group_by(Gender, .messages="Stratify by sex\nn={formatC(.count, big.mark = ',')}") |>
+
+  # does not deal with NA without na.rm true
+exclude_all(
+       #Gender == "Other" ~ "Exclude {.excluded} sex other" ,
+       Age < 20 | Age > 69 ~ "Excluded n={formatC(.excluded, big.mark = ',')} with age < 20 or age > 69" ,
+       DiagHighBloodPressure == "Y" ~ "Excluded n={formatC(.excluded, big.mark = ',',  digits = 6)} with High Blood Pressure",
+       HeartMedicine != "N" ~ "Excluded n={formatC(.excluded, big.mark = ',')} with Heart Medicine",
+       PulseMedicine != "N" ~ "Excluded n={formatC(.excluded, big.mark = ',')} with Pulse Medicine",
+       TobaccoSmoking < 5 ~ "Excluded n={formatC(.excluded, big.mark = ',',  digits = 6)} Smokers", 
+       na.rm = TRUE,
+       .headline = "{Gender}"
+  ) |>  comment(.headline = "\n{Gender} ", 
+                "n={formatC(.count, big.mark = ',')}") |> 
+  ungroup(.headline = "Final sample "#, .messages="n={.count}"
+          ) |> 
+  flowchart()
+
+formatC(22000, big.mark = ',',  digits = 6)
+```
+
+
+# _______________________________________
 # -descriptives for method
 
 ```{r}
@@ -414,19 +504,19 @@ dfc |>
   26.07/4
   
 # hunt
-  hunt |> 
-  separate(hunt_VO2_mLkgmin, c("mean", "sd"), sep = " ") |> 
-    filter(AgeGroup=="20-29 years" |
-             AgeGroup=="60-69 years" ) %>%
-    group_by(Gender) |> 
-  mutate(mean = as.numeric(mean),
-         percentual_decrease_per_decade = ((mean - lag(mean)) / mean * 100) /4, 
-        
-        percentual_decrease_per_decade2= (( lag(mean) - mean) / mean)*100/4 ,
-        percentual_decrease_per_decade3= (( mean - lag(mean) ) / lag(mean))*100/4 ,
-        lag = lag(mean))
-
-lm(EkB_rel_VO2~ I(AgeGroup/5), data = dfc)
+#   hunt |> 
+#   separate(hunt_VO2_mLkgmin, c("mean", "sd"), sep = " ") |> 
+#     filter(AgeGroup=="20-29 years" |
+#              AgeGroup=="60-69 years" ) %>%
+#     group_by(Gender) |> 
+#   mutate(mean = as.numeric(mean),
+#          percentual_decrease_per_decade = ((mean - lag(mean)) / mean * 100) /4, 
+#         
+#         percentual_decrease_per_decade2= (( lag(mean) - mean) / mean)*100/4 ,
+#         percentual_decrease_per_decade3= (( mean - lag(mean) ) / lag(mean))*100/4 ,
+#         lag = lag(mean))
+# 
+# lm(EkB_rel_VO2~ I(AgeGroup/5), data = dfc)
 
 
 # ((first value-last value) / first value) / decades
@@ -2064,7 +2154,9 @@ https://colorhunt.co/palettes/popular
 dfc_long %>%
   filter(AgeGroup != "+70 years") %>%
   ggplot(aes(AgeGroup, vo2, color = ExerciseAnswer)) +
-  ggdist::stat_pointinterval(position = position_dodge(1)) +
+  ggdist::stat_pointinterval(position = position_dodge(1),
+                             .width = c(0.66, .95) #c(0.5, 0.95)
+                             ) +
   facet_grid(Gender ~ test, labeller = labeller(test = c("EkB_rel_VO2" = "E-B", "Astrand_rel_VO2" = "Astr"))) +
   # scale_color_viridis_d(
   #   option = "mako", name = "", direction = 1,
@@ -2153,7 +2245,7 @@ dfc |>
 ```{r}
 # model data
 BMI <- 
-dfc_long_BMI %>% nest(-c(test, Gender, AgeGroup)) %>% 
+dfc_long_BMI %>% nest(data = -c(test, Gender, AgeGroup)) %>% 
   drop_na(AgeGroup) |> 
   mutate(fit = map(data, ~mgcv::gam(vo2 ~ s(BMI, bs = "cs", k = 5), data = .)),
          results = map(fit, broom::glance),
@@ -2161,7 +2253,9 @@ dfc_long_BMI %>% nest(-c(test, Gender, AgeGroup)) %>%
   unnest(results) %>%
   select(-data, -fit) 
 
-print(BMI |> mutate(R.square=round(R.square,4)) |> select( Gender, AgeGroup, test, R.square)) |> arrange(desc(R.square)) |> 
+print(BMI |> mutate(R.square=round(R.square,4)) |> 
+        select( Gender, AgeGroup, test, R.square)) |> 
+  arrange(desc(R.square)) |> 
   print(n=50)
 
 
@@ -2170,7 +2264,8 @@ dfc_long_BMI %>%
   group_modify(~ broom::glance(lm(vo2 ~ BMI, data = .x))) |> 
   select(test, Gender, AgeGroup, r.squared, adj.r.squared ) |> 
    arrange(desc(r.squared)) |>
-  print(n=50)
+  print(n=50) |> 
+  drop_na(AgeGroup)
 
 ```
 

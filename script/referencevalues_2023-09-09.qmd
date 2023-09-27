@@ -180,7 +180,7 @@ dfc <- dfc |> filter(id != 24939)
 ```{r}
 
 
-
+# global options for dtrackr
 
 old = options(
  #dtrackr.strata_glue="{.group}:{.value}",
@@ -193,73 +193,165 @@ old = options(
 # reset options 
 #options(old)
 
-
-
+# test type
+testtype <-
 dfc |> 
-  track(.headline = "Flow chart: EB-test   ",
+  mutate(test=case_when(EkB_rel_VO2 >= 1 & Astrand_rel_VO2 >= 1 ~ "Both",
+                   is.na(EkB_rel_VO2) & Astrand_rel_VO2 >= 1 ~ "Å-test",
+                   EkB_rel_VO2 >= 1 & is.na(Astrand_rel_VO2) ~ "EB-test",
+                   TRUE~NA)) |>
+  track(.headline = "Flow chart: test type     ",
+        .messages="Data from 2010-2022"
+  ) %>%
+  filter(!is.na(test), .headline = "Missing data on test type    ",
+         .messages = "Excluded {.excluded}") |> 
+  group_by(test, 
+           .headline = "",
+           .messages="Stratify by test\nn={formatC(.count, big.mark = ',')}"
+           
+  ) |>
+  status(.headline = "{test}") |> 
+  # does not deal with NA without na.rm true
+  exclude_all(
+    # Gender == "Other" ~ "Exclude {.excluded} sex other" ,
+    Age < 20 | Age > 69 ~          "{formatC(.excluded, big.mark = ',',format = 'fg')} with age < 20 or age > 69" ,
+    DiagHighBloodPressure != "N" ~ "{formatC(.excluded, big.mark = ',',format = 'fg')} with High Blood Pressure",
+    HeartMedicine != "N" ~         "{formatC(.excluded, big.mark = ',',format = 'fg')} with Heart Medicine",
+    PulseMedicine != "N" ~         "{formatC(.excluded, big.mark = ',',format = 'fg')} with Pulse Medicine",
+    TobaccoSmoking < 5 ~           "{formatC(.excluded, big.mark = ',',format = 'fg')} Smokers", 
+    na.rm = TRUE,
+    .headline = "{test} excluded"
+  ) |>  
+  comment(.headline = "", 
+                "n={formatC(.count, big.mark = ',')}") |> 
+  ungroup(.headline = "Final sample "#, .messages="n={.count}"
+  ) 
+
+
+testtype |> 
+  flowchart(filename="testtype",
+            formats = c("png","svg", "pdf"),
+                         maxWidth=20, 
+                        maxHeight = 20)
+
+
+
+
+# EB test
+eb <-
+dfc |> 
+  track(.headline = "Flow chart: the EB-test   ",
         .messages=" Data from 2010-2022"
-        ) %>%
- # status() %>%
-    group_by(Gender, 
-             .headline = "",
-             .messages="Stratify by sex\nn={formatC(.count, big.mark = ',')}"
-             
-             ) |>
+  ) %>%
+  group_by(Gender, 
+           .headline = "",
+           .messages="Stratify by sex\nn={formatC(.count, big.mark = ',')}"
+           
+  ) |>
   status(.headline = "{Gender}") |> 
-#  ungroup() |> 
-    filter(EkB_rel_VO2 > 0, 
-           .messages=" {formatC(.excluded, big.mark = ',')} without the EB-test",
-           .headline="{Gender} excluded" )|>  # between(Age, 20,69)
-      
-    # group_by(Gender,
-    #          .messages="Stratify by sex\nn={formatC(.count, big.mark = ',')}",
-    #          .headline = "Excluded ") |>
+  filter(EkB_rel_VO2 > 0, 
+         .messages=" {formatC(.excluded, big.mark = ',')} without the EB-test",
+         .headline="{Gender} excluded" )|>  # between(Age, 20,69)
+  
   comment(.headline = "") |> 
-
   # does not deal with NA without na.rm true
-exclude_all(
-       # Gender == "Other" ~ "Exclude {.excluded} sex other" ,
-       Age < 20 | Age > 69 ~          "{formatC(.excluded, big.mark = ',',format = 'fg')} with age < 20 or age > 69" ,
-       DiagHighBloodPressure != "N" ~ "{formatC(.excluded, big.mark = ',',format = 'fg')} with High Blood Pressure",
-       HeartMedicine != "N" ~         "{formatC(.excluded, big.mark = ',',format = 'fg')} with Heart Medicine",
-       PulseMedicine != "N" ~         "{formatC(.excluded, big.mark = ',',format = 'fg')} with Pulse Medicine",
-       TobaccoSmoking < 5 ~           "{formatC(.excluded, big.mark = ',',format = 'fg')} Smokers", 
-       na.rm = TRUE,
-       .headline = "{Gender} excluded"
-  ) |>  comment(.headline = "\n{Gender} ", 
+  exclude_all(
+    # Gender == "Other" ~ "Exclude {.excluded} sex other" ,
+    Age < 20 | Age > 69 ~          "{formatC(.excluded, big.mark = ',',format = 'fg')} with age < 20 or age > 69" ,
+    DiagHighBloodPressure != "N" ~ "{formatC(.excluded, big.mark = ',',format = 'fg')} with High Blood Pressure",
+    HeartMedicine != "N" ~         "{formatC(.excluded, big.mark = ',',format = 'fg')} with Heart Medicine",
+    PulseMedicine != "N" ~         "{formatC(.excluded, big.mark = ',',format = 'fg')} with Pulse Medicine",
+    TobaccoSmoking < 5 ~           "{formatC(.excluded, big.mark = ',',format = 'fg')} Smokers", 
+    na.rm = TRUE,
+    .headline = "{Gender} excluded"
+  ) |>  
+  comment(.headline = "", #"\n{Gender} ", 
                 "n={formatC(.count, big.mark = ',')}") |> 
   ungroup(.headline = "Final sample "#, .messages="n={.count}"
-          ) |> 
-  flowchart()
+  ) 
+
+# render plot, a4 width is 8.3 inches
+eb |> 
+  flowchart(filename="flowcharteb",
+            formats = c("png","svg", "pdf",
+                         maxWidth=30, 
+                        maxHeight=30))
 
 
+
+
+
+
+
+
+# Å test
+atest<-
 dfc |> 
-  track(.headline = "Å-test flow chart ",
-       # .messages="n={.count}"
-        ) %>%
- # status() %>%
-
-    filter(Astrand_rel_VO2 > 0, .messages="Excluded n={formatC(.excluded, big.mark = ',')} without the Å-test" )|>  # between(Age, 20,69)
-    #comment(.headline = "") |>  
-    group_by(Gender, .messages="Stratify by sex\nn={formatC(.count, big.mark = ',')}") |>
-
+  track(.headline = "Flow chart: the Å-test   ",
+        .messages=" Data from 2010-2022"
+  ) %>%
+  group_by(Gender, 
+           .headline = "",
+           .messages="Stratify by sex\nn={formatC(.count, big.mark = ',')}"
+           
+  ) |>
+  status(.headline = "{Gender}") |> 
+  filter(Astrand_rel_VO2 > 0, 
+         .messages=" {formatC(.excluded, big.mark = ',')} without the EB-test",
+         .headline="{Gender} excluded" )|>  # between(Age, 20,69)
+  
+  comment(.headline = "") |> 
   # does not deal with NA without na.rm true
-exclude_all(
-       #Gender == "Other" ~ "Exclude {.excluded} sex other" ,
-       Age < 20 | Age > 69 ~ "Excluded n={formatC(.excluded, big.mark = ',')} with age < 20 or age > 69" ,
-       DiagHighBloodPressure == "Y" ~ "Excluded n={formatC(.excluded, big.mark = ',',  digits = 6)} with High Blood Pressure",
-       HeartMedicine != "N" ~ "Excluded n={formatC(.excluded, big.mark = ',')} with Heart Medicine",
-       PulseMedicine != "N" ~ "Excluded n={formatC(.excluded, big.mark = ',')} with Pulse Medicine",
-       TobaccoSmoking < 5 ~ "Excluded n={formatC(.excluded, big.mark = ',',  digits = 6)} Smokers", 
-       na.rm = TRUE,
-       .headline = "{Gender}"
-  ) |>  comment(.headline = "\n{Gender} ", 
+  exclude_all(
+    # Gender == "Other" ~ "Exclude {.excluded} sex other" ,
+    Age < 20 | Age > 69 ~          "{formatC(.excluded, big.mark = ',',format = 'fg')} with age < 20 or age > 69" ,
+    DiagHighBloodPressure != "N" ~ "{formatC(.excluded, big.mark = ',',format = 'fg')} with High Blood Pressure",
+    HeartMedicine != "N" ~         "{formatC(.excluded, big.mark = ',',format = 'fg')} with Heart Medicine",
+    PulseMedicine != "N" ~         "{formatC(.excluded, big.mark = ',',format = 'fg')} with Pulse Medicine",
+    TobaccoSmoking < 5 ~           "{formatC(.excluded, big.mark = ',',format = 'fg')} Smokers", 
+    na.rm = TRUE,
+    .headline = "{Gender} excluded"
+  ) |>  
+  comment(.headline = "", #"\n{Gender} ", 
                 "n={formatC(.count, big.mark = ',')}") |> 
   ungroup(.headline = "Final sample "#, .messages="n={.count}"
-          ) |> 
-  flowchart()
+  ) 
 
-formatC(22000, big.mark = ',',  digits = 6)
+# render plot and save
+atest |> 
+  flowchart(filename="flowchartatest",
+            formats = c("png","svg", "pdf"),
+                         maxWidth=20, 
+                        maxHeight =20)
+
+
+
+
+
+```
+
+
+# significance and effect size tests
+
+```{r}
+
+# statistically compare the eb test between men and women
+
+lm(EkB_rel_VO2 ~ Gender, data=eb |>  mutate(Gender=if_else(Gender == "Male",1,0))) |> broom::tidy()
+
+lm(Astrand_rel_VO2 ~ Gender -1, data=atest) |> broom::tidy()|> 
+  mutate(round(p.value,3))
+
+
+# Cohens D
+atest %>% rstatix::cohens_d(Astrand_rel_VO2 ~ Gender, var.equal = TRUE)
+
+eb %>% rstatix::cohens_d(EkB_rel_VO2 ~ Gender, var.equal = TRUE)
+
+atest %>% rstatix::cohens_d(Astrand_MaxVO2 ~ Gender, var.equal = TRUE)
+
+eb %>% rstatix::cohens_d(EkB_MaxVO2 ~ Gender, var.equal = TRUE)
+
 ```
 
 
@@ -530,7 +622,7 @@ dfc |>
 ((43.0-31.1)/43.0)*100/4
 
 
-# ((first value-last value) / first value) / decades
+# ((first value-last value) / first value) / number of decades
 
 # EB men
  ((49.20-35.21) / 49.20)*100 / 4
@@ -607,17 +699,19 @@ percent_diff_mL_men = ( meanL_Female -meanL_Male) /meanL_Male * 100)
 # ----------------------
 
 # -descriptive table
-
+## table 1
 ```{r}
 
+# using data from flow chart
 
 table1 <-
 bind_cols(
-  dfc %>%
-    filter(Gender != "Other",
-           !is.na(agegroup_5),
-           TobaccoSmoking == 5,
-           !is.na(EkB_rel_VO2)) %>%
+  # dfc %>%
+  #   filter(Gender != "Other",
+  #          !is.na(agegroup_5),
+  #          TobaccoSmoking == 5,
+  #          !is.na(EkB_rel_VO2)) %>%
+  eb |> 
     group_by(Gender, agegroup_5) %>%
     summarize(
       Exercise = glue("{round(mean(if_else(ExerciseAnswer>=4, 1, 0)*100, na.rm=TRUE),0)}%"),
@@ -627,17 +721,18 @@ bind_cols(
     ) %>%
     mutate(
       Exercise_ekb = Exercise,
-      BMI_ekb = sprintf("%.1f ±%.1f", round(BMI_mean, 1), round(BMI_sd, 1)),
-      WeightKG_ekb = sprintf("%.1f ±%.1f", round(WeightKG_mean, 1), round(WeightKG_sd, 1)),
-      HeightCM_ekb = sprintf("%.1f ±%.1f", round(HeightCM_mean, 1), round(HeightCM_sd, 1))
+      BMI_ekb = sprintf("%.1f +%.1f", round(BMI_mean, 1), round(BMI_sd, 1)), # "%.1f ±%.1f" removed +-
+      WeightKG_ekb = sprintf("%.1f +%.1f", round(WeightKG_mean, 1), round(WeightKG_sd, 1)),
+      HeightCM_ekb = sprintf("%.1f +%.1f", round(HeightCM_mean, 1), round(HeightCM_sd, 1))
     ) %>%
     select(-ends_with("_mean"), -ends_with("_sd"), -Exercise),
   
-  dfc %>%
-    filter(Gender != "Other",
-           !is.na(agegroup_5),
-           TobaccoSmoking == 5,
-           !is.na(Astrand_rel_VO2)) %>%
+  # dfc %>%
+  #   filter(Gender != "Other",
+  #          !is.na(agegroup_5),
+  #          TobaccoSmoking == 5,
+  #          !is.na(Astrand_rel_VO2)) %>%
+  atest |> 
     group_by(Gender, agegroup_5) %>%
     summarize(
       Exercise = glue("{round(mean(if_else(ExerciseAnswer>=4, 1, 0)*100, na.rm=TRUE),0)}%"),
@@ -647,9 +742,9 @@ bind_cols(
     ) %>%
     mutate(
       Exercise_Astrand = Exercise,
-      BMI_Astrand = sprintf("%.1f ±%.1f", round(BMI_mean, 1), round(BMI_sd, 1)),
-      WeightKG_Astrand = sprintf("%.1f ±%.1f", round(WeightKG_mean, 1), round(WeightKG_sd, 1)),
-      HeightCM_Astrand = sprintf("%.1f ±%.1f", round(HeightCM_mean, 1), round(HeightCM_sd, 1))
+      BMI_Astrand = sprintf("%.1f +%.1f", round(BMI_mean, 1), round(BMI_sd, 1)),
+      WeightKG_Astrand = sprintf("%.1f +%.1f", round(WeightKG_mean, 1), round(WeightKG_sd, 1)),
+      HeightCM_Astrand = sprintf("%.1f +%.1f", round(HeightCM_mean, 1), round(HeightCM_sd, 1))
     ) %>%
     ungroup() %>%
     select(-ends_with("_mean"), -ends_with("_sd"), -Gender, - agegroup_5, -Exercise)
@@ -667,7 +762,7 @@ bind_cols(
     TRUE ~ Gender
   )
   ) |> 
-   mutate(across(c(BMI_ekb, BMI_Astrand, WeightKG_ekb, WeightKG_Astrand, HeightCM_ekb, HeightCM_Astrand, Exercise_ekb, Exercise_Astrand),
+   mutate(across(c(WeightKG_ekb, WeightKG_Astrand, HeightCM_ekb, HeightCM_Astrand, BMI_ekb, BMI_Astrand,  Exercise_ekb, Exercise_Astrand),
                 as.character))
 
 
@@ -682,6 +777,8 @@ table1 |>
     use_text_wrapping = FALSE,
     use_page_size_select = TRUE
   )
+
+openxlsx::write.xlsx(table1, here::here("tables" , "table1.xlsx"))
 
 ```
 
@@ -1119,7 +1216,7 @@ df_filtered <- dfc |>
   pivot_longer(cols = c(EkB_rel_VO2, Astrand_rel_VO2),
                names_to = "type",
                values_to = "vo2") |> 
-  mutate(type = if_else(type=="EkB_rel_VO2", "E-B", "Astr")) |> 
+  mutate(type = if_else(type=="EkB_rel_VO2", "EB-test", "Å-test")) |> 
   drop_na(vo2)
 
 df_summary <- df_filtered %>%
@@ -1160,7 +1257,7 @@ df_filtered |>
   ggplot(aes(x = vo2, y = AgeGroup)) +
   stat_density_ridges(
     aes( 
-      fill = factor(stat(quantile))
+      fill = factor(after_stat(quantile))
       
       ),
     jittered_points = TRUE, position = "raincloud", point_size = 0.2, point_alpha = .02,
@@ -1190,7 +1287,7 @@ df_filtered |>
       colorspace::darken("#DAEEF3", 0.05),
       colorspace::darken("#B7DEE8", 0.13),
       colorspace::darken("#92CDDC", 0.2))) +
-  facet_grid(Gender ~ factor(type, levels=c('E-B', 'Astr'))) +
+  facet_grid(Gender ~ factor(type, levels=c('EB-test', 'Å-test'))) +
   theme_minimal(base_family = "Roboto") +
   theme(
     axis.title.y = element_blank(),
@@ -1346,7 +1443,7 @@ dfc %>%
           PulseMedicine == "N", 
           TobaccoSmoking > 4, 
           Gender != "Other"
-          ) |> 
+          )  |> 
   calculate_percentiles_in_table(variable = EkB_rel_VO2)
 
 
@@ -1604,7 +1701,7 @@ Astrand |> make_reference_table()
                PulseMedicine == "N",
                TobaccoSmoking == 5,
                Age >= 20,
-               Age <= 75,
+               Age <= 70,
                Gender != "Other") %>%
         group_by(Gender, Age) %>%
         mutate(
@@ -1758,7 +1855,7 @@ Astrand |> make_reference_table()
                PulseMedicine == "N",
                TobaccoSmoking == 5,
                Age >= 20,
-               Age <= 75,
+               Age <= 70,
                Gender != "Other") %>%
         group_by(Gender, Age) %>%
         mutate(
@@ -1974,7 +2071,12 @@ dfc |>
 ```{r}
 dfc_long <- 
   dfc |> 
-  filter(Age >= 20 , Age <= 70) |> 
+  filter(DiagHighBloodPressure == "N",
+               HeartMedicine == "N",
+               PulseMedicine == "N",
+               TobaccoSmoking == 5,
+               Gender != "Other") %>%
+  filter(Age >= 20 , Age < 70) |> 
   select(ExerciseAnswer, Gender, AgeGroup, Age, Astrand_rel_VO2, EkB_rel_VO2) |> 
   group_by(ExerciseAnswer, Gender, Age, AgeGroup) |> 
   pivot_longer(cols = c(EkB_rel_VO2, Astrand_rel_VO2),
@@ -2030,13 +2132,41 @@ dfc_long %>%
 
 dfc_long %>%
   group_by(test, Gender, AgeGroup) %>%
-  group_modify(~ broom::glance(lm(vo2 ~ ExerciseAnswer, data = .x))) |> 
+  group_modify(~ broom::glance(lm(vo2 ~ as.character(ExerciseAnswer), data = .x))) |> 
   select(test, Gender, AgeGroup, r.squared, adj.r.squared ) |> 
    arrange(desc(r.squared)) |>
   drop_na(AgeGroup) |> 
-  print(n=50)
+  print(n=50) |> arrange(r.squared)
 
 print(exercise, n=30)
+
+
+
+
+dfc_long %>%
+  group_by(test) %>%
+  group_modify(~ broom::glance(lm(vo2 ~ as.character(ExerciseAnswer) + Gender + Age, data = .x))) |> 
+  select(test,  r.squared, adj.r.squared ) |> 
+   arrange(desc(r.squared)) 
+
+dfc_long %>%
+  group_by(test) %>%
+  group_modify(~ broom::glance(lm(vo2 ~ as.character(ExerciseAnswer), data = .x))) |> 
+  select(test,  r.squared, adj.r.squared ) |> 
+   arrange(desc(r.squared)) 
+# A model adjusted for sex, age and self reported exercise was explaining 43% and 25% of the variance for the EB and Å-test respectively, while in a model with only self reported exercise the explained variance was 8% and 10%.
+
+
+# p values
+# overall
+
+ # group_by(test, Gender, AgeGroup) %>%
+  lm(vo2 ~ as.character(ExerciseAnswer), data = dfc_long) |> broom::tidy()
+
+
+dfc_long %>%
+  group_by(test, Gender, AgeGroup) %>%
+  group_modify(~ broom::tidy(lm(vo2 ~ as.character(ExerciseAnswer), data = .x))) |> print(n=120)
 ```
 
 ## Graphs
@@ -2157,7 +2287,7 @@ dfc_long %>%
   ggdist::stat_pointinterval(position = position_dodge(1),
                              .width = c(0.66, .95) #c(0.5, 0.95)
                              ) +
-  facet_grid(Gender ~ test, labeller = labeller(test = c("EkB_rel_VO2" = "E-B", "Astrand_rel_VO2" = "Astr"))) +
+  facet_grid(Gender ~ test, labeller = labeller(test = c("EkB_rel_VO2" = "EB-test", "Astrand_rel_VO2" = "Å-test"))) +
   # scale_color_viridis_d(
   #   option = "mako", name = "", direction = 1,
   #   begin = .15, end = .9
@@ -2205,6 +2335,11 @@ ggsave(width = 9, height = 6, dpi = 600, "vo2vsexercise.svg")
 ```{r}
 dfc_long_BMI <- 
 dfc |> 
+  filter(DiagHighBloodPressure == "N",
+               HeartMedicine == "N",
+               PulseMedicine == "N",
+               TobaccoSmoking == 5,
+               Gender != "Other") %>%
    mutate(BMI_Group = case_when(
     BMI < 18.5 ~ "Underweight",
     BMI >= 18.5 & BMI < 25 ~ "Normal weight",
@@ -2244,6 +2379,7 @@ dfc |>
 ## R2 for BMI and vo2 by agegroup
 ```{r}
 # model data
+
 BMI <- 
 dfc_long_BMI %>% nest(data = -c(test, Gender, AgeGroup)) %>% 
   drop_na(AgeGroup) |> 
@@ -2251,12 +2387,39 @@ dfc_long_BMI %>% nest(data = -c(test, Gender, AgeGroup)) %>%
          results = map(fit, broom::glance),
          R.square = map_dbl(fit, ~ summary(.)$r.sq)) %>%
   unnest(results) %>%
-  select(-data, -fit) 
+  ungroup() |> 
+  arrange(R.square) |> 
+  select(-data, -fit, Gender, AgeGroup,test,R.square) 
 
 print(BMI |> mutate(R.square=round(R.square,4)) |> 
         select( Gender, AgeGroup, test, R.square)) |> 
   arrange(desc(R.square)) |> 
   print(n=50)
+
+# BMI + age + gender
+dfc_long_BMI %>% nest(data = -c(test)) %>% 
+ # drop_na(AgeGroup) |> 
+  mutate(fit = map(data, ~mgcv::gam(vo2 ~ s(BMI, bs = "cs", k = 5) + Gender+ Age, data = .)),
+         results = map(fit, broom::glance),
+         R.square = map_dbl(fit, ~ summary(.)$r.sq)) %>%
+  unnest(results) %>%
+  ungroup() |> 
+  arrange(R.square) |> 
+  select(-data, -fit,test,R.square) 
+
+# A model adjusted for sex, age and BMI was explaining 67% and 34% of the variance for the EB and Å-test respectively, while in a model with only BMI the explained variance was 29% and 23%.
+
+
+# only BMI
+dfc_long_BMI %>% nest(data = -c(test)) %>% 
+ # drop_na(AgeGroup) |> 
+  mutate(fit = map(data, ~mgcv::gam(vo2 ~ s(BMI, bs = "cs", k = 5), data = .)),
+         results = map(fit, broom::glance),
+         R.square = map_dbl(fit, ~ summary(.)$r.sq)) %>%
+  unnest(results) %>%
+  ungroup() |> 
+  arrange(R.square) |> 
+  select(-data, -fit, test,R.square) 
 
 
 dfc_long_BMI %>%
@@ -2285,14 +2448,18 @@ dfc_long_BMI |>
   #geom_rug(alpha=0.1) +
   #geom_point(color = "transparent") +
   # geom_text(data = BMI, aes(x=40, y=50, label = paste( "R2 =",round(R.square,2) )), color="grey30") +
-   facet_grid(Gender ~ test, labeller = labeller(test = c("EkB_rel_VO2" = "E-B", "Astrand_rel_VO2" = "Astr"))) +
+   facet_grid(Gender ~ test, labeller = labeller(test = c("EkB_rel_VO2" = "EB-test", "Astrand_rel_VO2" = "Å-test"))) +
  # scale_y_continuous(limits = c(25,65)) +
-    #scale_color_viridis_d(option="rocket", end = 0.9, direction = 1) +
-  scale_color_manual(values = (c("#AE445A", "#662549","black","#213555", "#4F709C"))) +
-  
+    # bscale_color_viridis_d(option="rocket", end = 0.9, direction = 1) +
+ # scale_color_manual(values = (c("#AE445b", "#662549","black","#213555", "#4F709C"))) +
+ #scale_color_manual(values = c( "#c5b0d5", "#9467bd","#333333","#ff7f0e", "#ffbb78")) +
+ #scale_color_manual(values = c("#6e67c7", "#ffd700","black", "#333333", "#ff6600"))+
+#scale_color_manual(values = c("#005689", "#ff7300", "#333333", "#8b8b8b", "#1f6e93"))
+
+scale_color_manual(values = c("#005689", "#3F6366", "#7F7144", "#BF7E22", "#FF8C00"))+
         labs(
-    x = "BMI",  
-    y = expression("Estimated vo"[2]*"max"),  
+    x = expression(BMI~(kg/m^2)),  
+     y = expression("Estimated vo"[2]*"max (mL/min/kg)"), 
     color = "Age group"  # Remove color legend title
   )+
   theme_minimal() +
@@ -2320,3 +2487,19 @@ ggsave(width = 9, height = 6, dpi = 600, "vo2VSbmi.png")
 ggsave(width = 9, height = 6, dpi = 600, "vo2VSbmi.svg")
 
 ```
+
+
+## create color gradient
+```{r}
+library(grDevices)
+
+# Define the start and end colors
+start_color <- "#005689"
+end_color <- "darkorange"
+
+# Generate 5 evenly spaced colors in the gradient
+gradient_colors <- colorRampPalette(c(start_color, end_color))(5)
+
+
+```
+
